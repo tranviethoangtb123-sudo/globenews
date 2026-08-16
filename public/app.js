@@ -1105,8 +1105,10 @@ function setView(v) {
   state.view = v;
   $('globeView').classList.toggle('hidden', v !== 'globe');
   $('listView').classList.toggle('hidden', v !== 'list');
+  $('sectorsView').classList.toggle('hidden', v !== 'sectors');
   for (const b of $('viewToggle').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === v);
   if (v === 'list') renderList($('searchInput').value);
+  if (v === 'sectors') renderSectors();
   if (v === 'globe' && state.map) {
     setTimeout(() => state.map.resize(), 60);
   }
