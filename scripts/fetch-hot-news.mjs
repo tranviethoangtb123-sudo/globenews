@@ -13,12 +13,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA = join(__dirname, '..', 'data');
-const OUT = join(__dirname, '..', 'public', 'data');
+// 数据与产出都在 public/data（随站点一起发布，纯静态托管可用）
+const DATA = join(__dirname, '..', 'public', 'data');
+const OUT = DATA;
 mkdirSync(OUT, { recursive: true });
 
 const args = process.argv.slice(2);
 const LIMIT = (() => { const i = args.indexOf('--limit'); return i >= 0 ? parseInt(args[i + 1], 10) : 0; })();
+const ONLY = (() => { const i = args.indexOf('--only'); return i >= 0 ? args[i + 1].split(',').map((s) => s.trim()).filter(Boolean) : null; })();
 const SKIP_TILES = args.includes('--skip-tiles');
 
 const UA = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36' };
@@ -138,7 +140,8 @@ for (const c of topCities) {
   queries.push({ key: `city|${c.n.toLowerCase()}|en`, q: c.n });
   if (c.z) queries.push({ key: `city|${c.z.toLowerCase()}|zh`, q: c.z });
 }
-const list = LIMIT ? queries.slice(0, LIMIT) : queries;
+const list0 = LIMIT ? queries.slice(0, LIMIT) : queries;
+const list = ONLY ? list0.filter((x) => ONLY.some((k) => x.key.toLowerCase().includes(k.toLowerCase()) || x.q.toLowerCase().includes(k.toLowerCase()))) : list0;
 console.log(`[fetch] 查询清单 ${list.length} 条（国家 ${countries.length} / 城市 ${topCities.length}）`);
 
 /* ---------- 抓取 ---------- */
