@@ -7,14 +7,15 @@
 //       web/public/data/runtime.json （当前 OpenFreeMap 瓦片地址）
 // 逻辑与 server.js 一致：多域名轮换 + 重试 + 今日→近7天→近30天回退
 // ============================================================
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// 数据与产出都在 public/data（随站点一起发布，纯静态托管可用）
-const DATA = join(__dirname, '..', 'public', 'data');
+// 数据目录自动探测（public/data 或 data），随站点发布时数据在 public/data
+const CANDIDATES = [join(__dirname, '..', 'public', 'data'), join(__dirname, '..', 'data')];
+const DATA = CANDIDATES.find((d) => existsSync(join(d, 'countries.json'))) || CANDIDATES[0];
 const OUT = DATA;
 mkdirSync(OUT, { recursive: true });
 
