@@ -198,7 +198,7 @@ main{flex:1;position:relative;min-height:0}
 .article .a-tz{font-size:13px;color:#eaf3ff;line-height:1.5;margin-top:5px;border-left:2px solid var(--green);padding-left:8px}
 .article .a-snippet{font-size:12.5px;color:var(--dim);margin-top:6px;line-height:1.55}
 .article .a-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--faint);font-family:var(--font-mono)}
-.article .a-src{color:var(--blue);font-weight:600;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.article .a-src{color:var(--blue);font-weight:600;word-break:break-all}
 .article .a-new{font-size:9.5px;color:#050505;background:var(--amber);border-radius:4px;padding:1px 5px;font-weight:700}
 .article .a-open{margin-left:auto;font-size:11px;color:var(--faint)}
 
@@ -214,6 +214,19 @@ main{flex:1;position:relative;min-height:0}
   display:inline-block;min-width:19px;padding:1px 5px;margin-right:6px;border-radius:5px;
   font-size:10px;font-weight:800;color:#050505;text-align:center;vertical-align:middle;font-family:var(--font-mono);
 }
+
+/* ---------- 来源视图 ---------- */
+.src-region{display:flex;gap:8px;padding:8px 12px 4px;flex-shrink:0}
+.src-region .seg-item{
+  flex:1;padding:7px 0;border-radius:8px;font-size:13px;font-weight:600;color:var(--dim);
+  background:var(--card2);border:1px solid var(--line2);
+}
+.src-region .seg-item.on{background:var(--green);border-color:var(--green);color:#050505}
+.src-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:10px}
+.src-name{font-family:var(--font-display);font-weight:700;font-size:14px;margin-bottom:6px}
+.src-group{font-family:var(--font-mono);font-size:10px;color:var(--faint);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;margin-left:6px;font-weight:400}
+.src-item{display:block;padding:8px 0;border-top:1px dashed var(--line);cursor:pointer}
+.src-item:active{background:#161616;border-radius:8px}
 
 /* ---------- 状态视图 ---------- */
 .status{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:36px 20px;text-align:center}

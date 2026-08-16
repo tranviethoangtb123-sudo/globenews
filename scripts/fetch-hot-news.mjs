@@ -24,6 +24,7 @@ const args = process.argv.slice(2);
 const LIMIT = (() => { const i = args.indexOf('--limit'); return i >= 0 ? parseInt(args[i + 1], 10) : 0; })();
 const ONLY = (() => { const i = args.indexOf('--only'); return i >= 0 ? args[i + 1].split(',').map((s) => s.trim()).filter(Boolean) : null; })();
 const SKIP_TILES = args.includes('--skip-tiles');
+const SKIP_SOURCES = args.includes('--skip-sources');
 
 const UA = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36' };
 const MIN_ITEMS = 4;
@@ -194,6 +195,47 @@ for (const key in entries) {
 }
 await writeFile(join(OUT, 'news-hot.json'), JSON.stringify(index)); // 索引很小，启动即拉取
 await writeFile(join(OUT, 'news-titles.json'), JSON.stringify({ generatedAt: index.generatedAt, items: titles })); // 任意地名全文扫描（懒加载）
+
+/* ---------- 抓取「新闻来源」feeds（用户提供的国内/国外来源分类） ---------- */
+const sourceOut = [];
+if (!SKIP_SOURCES) {
+  try {
+  const sd = JSON.parse(await readFile(join(__dirname, 'sources-data.json'), 'utf8'));
+  const so = (sd && sd.sources) || [];
+  for (let i = 0; i < so.length; i++) {
+    const src = so[i];
+    try {
+      const r = await fetch(src.url, { signal: AbortSignal.timeout(8000), headers: UA });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const items = parseRssItems(await r.text());
+      if (items.length) {
+        const top = items.slice(0, 8);
+        sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top });
+        // 同时并入板块聚合（来源名作为地点标签）
+        for (const it of top) {
+          for (const c of it.cat || []) {
+            if (!seenLink.has(it.link)) {
+              seenLink.add(it.link);
+              titles.push({ t: it.title, l: it.link, loc: '📰 ' + src.name, cat: it.cat, p: it.published });
+            }
+            const b = (sectors[c] = sectors[c] || []);
+            if (b.length < 60 && !b.some((x) => x.l === it.link)) {
+              b.push({ t: it.title, l: it.link, loc: '📰 ' + src.name, s: it.source || src.name, p: it.published, sn: it.snippet });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`);
+    }
+    if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
+    await sleep(250);
+  }
+  await writeFile(join(OUT, 'news-sources.json'), JSON.stringify({ generatedAt: new Date().toISOString(), sources: sourceOut }));
+  console.log(`[fetch] 来源抓取完成：${sourceOut.length} 个来源`);
+  } catch (e) { console.warn('[fetch] 来源抓取跳过：', e.message); }
+}
+
 for (const c in sectors) {
   sectors[c].sort((a, b) => new Date(b.p || 0) - new Date(a.p || 0));
   if (sectors[c].length > 60) sectors[c] = sectors[c].slice(0, 60);

@@ -33,6 +33,8 @@ const state = {
   newsCat: 'ALL',      // 新闻面板板块过滤
   sectorIndex: null,   // 板块视图聚合数据（懒加载）
   sectorSel: 'ALL',    // 板块视图当前选中
+  srcRegion: '国内',    // 来源视图：国内/国外
+  srcGroup: null,       // 来源视图：当前分类组
   labelLayerIds: [],
   toastTimer: null,
   toastSeen: new Set()
@@ -379,7 +381,7 @@ function initMap() {
     bindMapEvents();
     // 3D 模式自动开启地貌（失败则静默跳过）
     try { state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 }); } catch (e) { /* 不支持则忽略 */ }
-    $('projBtn').textContent = '2D/3D';
+    $('projBtn').textContent = '3D';
     $('projBtn').classList.add('on');
     $('projBtn').title = '切换为 2D 平面地图';
   });
@@ -396,7 +398,7 @@ function setProjection(t) {
   if (!state.map) return;
   state.projection = t;
   try {
-    state.map.setProjection(t);
+    state.map.setProjection({ type: t }); // v5.24 必须传对象，字符串会静默失效
     if (t === 'globe') {
       try { state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 }); } catch (e) { /* ignore */ }
     } else {
@@ -407,6 +409,7 @@ function setProjection(t) {
     toast('切换失败');
     return;
   }
+  $('projBtn').textContent = t === 'globe' ? '3D' : '2D';
   $('projBtn').classList.toggle('on', t === 'globe');
   $('projBtn').title = t === 'globe' ? '切换为 2D 平面地图' : '切换为 3D 地球仪';
 }
@@ -721,10 +724,7 @@ const SECTORS_META = [
 ];
 const CAT_COLORS = ['#38bdf8', '#fbbf24', '#f472b6', '#34d399', '#a78bfa', '#f87171', '#60a5fa', '#facc15', '#4ade80', '#fb923c'];
 const catColor = (key) => CAT_COLORS[((key.charCodeAt(0) - 65) % CAT_COLORS.length + CAT_COLORS.length) % CAT_COLORS.length];
-function catChips(cats) {
-  if (!cats || !cats.length) return '';
-  return cats.slice(0, 3).map((c) => `<span class="cat-badge" style="background:${catColor(c)}">${c}</span>`).join('');
-}
+const secShort = (key) => { const s = SECTORS_META.find((x) => x.key === key); return s ? s.title.split('/')[0] : key; };
 
 function renderNews(data) {
   const body = $('sheetBody');
@@ -759,7 +759,7 @@ function renderNews(data) {
       bar.appendChild(b);
     };
     mk('ALL', '全部');
-    for (const c of cats) mk(c, c);
+    for (const c of cats) mk(c, secShort(c));
     body.appendChild(bar);
   }
   const items = (state.newsCat && state.newsCat !== 'ALL')
@@ -777,7 +777,6 @@ function renderNews(data) {
       <div class="a-tz"></div>
       ${it.snippet ? `<div class="a-snippet">${esc(it.snippet)}</div>` : ''}
       <div class="a-meta">
-        ${catChips(it.cat)}
         ${it.source ? `<span class="a-src">${esc(it.source)}</span>` : ''}
         ${isNew ? '<span class="a-new">今日</span>' : ''}
         <span>${relTime(it.published)}</span>
@@ -974,7 +973,7 @@ async function renderSectors() {
   mk('ALL', `全部 ${total}`);
   for (const s of SECTORS_META) {
     const n = (buckets[s.key] || []).length;
-    mk(s.key, `${s.key} ${s.icon}${n ? `<span class="cnt">${n}</span>` : ''}`);
+    mk(s.key, `${s.icon} ${secShort(s.key)}${n ? `<span class="cnt">${n}</span>` : ''}`);
   }
   renderSectorsList(buckets);
 }
@@ -1007,7 +1006,6 @@ function renderSectorsList(buckets) {
       <div class="a-tz"></div>
       ${it.sn ? `<div class="a-snippet">${esc(it.sn)}</div>` : ''}
       <div class="a-meta">
-        ${catChips([sel === 'ALL' ? '' : sel].filter(Boolean))}
         ${it.loc ? `<span class="s-loc">📍 ${esc(it.loc)}</span>` : ''}
         ${it.s ? `<span class="a-src">${esc(it.s)}</span>` : ''}
         ${isNew ? '<span class="a-new">今日</span>' : ''}
@@ -1018,6 +1016,80 @@ function renderSectorsList(buckets) {
     a.rel = 'noopener';
     list.appendChild(a);
     attachTranslation(a, it.t);
+  }
+}
+
+/* ---------------- 来源视图（用户提供的国内/国外新闻来源分类） ---------------- */
+let srcDataPromise = null;
+function getSourceData() {
+  if (!srcDataPromise) {
+    srcDataPromise = fetch('data/news-sources.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return srcDataPromise;
+}
+
+async function renderSources() {
+  const regionEl = $('srcRegion');
+  const tabs = $('srcTabs');
+  const list = $('srcList');
+  regionEl.innerHTML = '';
+  tabs.innerHTML = '';
+  renderSectorStatus(list, '⏳', '正在加载来源新闻…', '');
+  const data = await getSourceData();
+  if (!data || !data.sources || !data.sources.length) {
+    renderSectorStatus(list, '📭', '暂无来源数据', '云端暂未抓取来源，请稍后再试');
+    return;
+  }
+  // 国内 / 国外 切换
+  for (const rg of ['国内', '国外']) {
+    const b = el('button', 'seg-item' + (state.srcRegion === rg ? ' on' : ''), rg);
+    b.addEventListener('click', () => { state.srcRegion = rg; state.srcGroup = null; renderSources(); });
+    regionEl.appendChild(b);
+  }
+  const srcs = data.sources.filter((s) => s.region === state.srcRegion);
+  const groups = [...new Set(srcs.map((s) => s.group))];
+  tabs.innerHTML = '';
+  const allBtn = el('button', 'sector-tab' + (state.srcGroup === null ? ' on' : ''), '全部');
+  allBtn.addEventListener('click', () => { state.srcGroup = null; renderSourcesList(data); });
+  tabs.appendChild(allBtn);
+  for (const g of groups) {
+    const b = el('button', 'sector-tab' + (state.srcGroup === g ? ' on' : ''), g);
+    b.addEventListener('click', () => { state.srcGroup = state.srcGroup === g ? null : g; renderSourcesList(data); });
+    tabs.appendChild(b);
+  }
+  renderSourcesList(data);
+}
+
+function renderSourcesList(data) {
+  const list = $('srcList');
+  list.innerHTML = '';
+  const srcs = data.sources
+    .filter((s) => s.region === state.srcRegion)
+    .filter((s) => !state.srcGroup || s.group === state.srcGroup);
+  if (!srcs.length) {
+    list.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该分类暂无来源</div>'));
+    return;
+  }
+  for (const src of srcs) {
+    const card = el('div', 'src-card');
+    card.appendChild(el('div', 'src-name', `${esc(src.name)} <span class="src-group">${esc(src.group)}</span>`));
+    for (const it of (src.items || []).slice(0, 5)) {
+      const a = el('a', 'src-item', `
+        <div class="a-title">${esc(it.title)}</div>
+        <div class="a-tz"></div>
+        <div class="a-meta">
+          <span>${relTime(it.published)}</span>
+          <span class="a-open">↗</span>
+        </div>`);
+      a.href = it.link;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      card.appendChild(a);
+      attachTranslation(a, it.title);
+    }
+    list.appendChild(card);
   }
 }
 
@@ -1106,9 +1178,11 @@ function setView(v) {
   $('globeView').classList.toggle('hidden', v !== 'globe');
   $('listView').classList.toggle('hidden', v !== 'list');
   $('sectorsView').classList.toggle('hidden', v !== 'sectors');
+  $('sourcesView').classList.toggle('hidden', v !== 'sources');
   for (const b of $('viewToggle').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === v);
   if (v === 'list') renderList($('searchInput').value);
   if (v === 'sectors') renderSectors();
+  if (v === 'sources') renderSources();
   if (v === 'globe' && state.map) {
     setTimeout(() => state.map.resize(), 60);
   }
