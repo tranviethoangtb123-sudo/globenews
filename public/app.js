@@ -26,11 +26,13 @@ const state = {
   styleBase: null,
   tileTiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'],
   map: null,
-  terrainOn: false,
   projection: 'globe',
   selected: null,
   selectedGeoId: null,
   newsReqId: 0,
+  newsCat: 'ALL',      // 新闻面板板块过滤
+  sectorIndex: null,   // 板块视图聚合数据（懒加载）
+  sectorSel: 'ALL',    // 板块视图当前选中
   labelLayerIds: [],
   toastTimer: null,
   toastSeen: new Set()
@@ -206,22 +208,23 @@ function darkenLayer(l) {
   for (const k of KEYS) {
     const v = p[k];
     if (typeof v !== 'string' || !v || !v.startsWith('#')) continue;
-    if (k === 'text-color') p[k] = isLabel ? '#cddaf0' : adjust(v, 0.85, 0.7);
-    else if (k === 'text-halo-color') p[k] = '#0a101e';
-    else if (l.type === 'background') p[k] = '#060a14';
-    else if (isWater) p[k] = (id === 'water') ? '#0b1830' : adjust(v, 0.5, 0.5);
-    else if (isRoad) p[k] = adjust(v, 0.42, 0.35);
-    else if (isBoundary) p[k] = '#7c8fb3';
-    else if (isBuilding) p[k] = '#1c2842';
-    else if (isLand) p[k] = adjust(v, 0.4, 0.5);
-    else if (isAero) p[k] = adjust(v, 0.45, 0.4);
-    else if (isPoi) p[k] = '#c9d6ec';
-    else p[k] = adjust(v, 0.45, 0.7);
+    if (k === 'text-color') p[k] = isLabel ? '#e6f0ff' : adjust(v, 0.9, 0.7);
+    else if (k === 'text-halo-color') p[k] = '#04060c';
+    else if (l.type === 'background') p[k] = '#04060c';
+    else if (isWater) p[k] = (id === 'water') ? '#06101f' : adjust(v, 0.35, 0.4);
+    else if (isRoad) p[k] = adjust(v, 0.3, 0.3);
+    else if (isBoundary) p[k] = '#3fa7e0';
+    else if (isBuilding) p[k] = '#131c2e';
+    else if (isLand) p[k] = adjust(v, 0.22, 0.35);
+    else if (isAero) p[k] = adjust(v, 0.3, 0.3);
+    else if (isPoi) p[k] = '#dbe7f7';
+    else p[k] = adjust(v, 0.3, 0.5);
   }
   if (isBoundary) {
     const lo = p['line-opacity'];
-    if (typeof lo === 'number') p['line-opacity'] = lo * 0.8;
-    else if (lo == null) p['line-opacity'] = 0.5;
+    if (typeof lo === 'number') p['line-opacity'] = Math.min(0.9, lo);
+    else if (lo == null) p['line-opacity'] = 0.6;
+    if (typeof p['line-width'] === 'number') p['line-width'] = Math.max(0.7, p['line-width']);
   }
   if (isWater && typeof p['fill-opacity'] === 'number') p['fill-opacity'] = p['fill-opacity'] * 0.9;
   return l;
@@ -264,22 +267,22 @@ function adaptStyle(base) {
     id: 'graticule', type: 'line', source: 'graticule',
     filter: ['==', ['geometry-type'], 'LineString'],
     paint: {
-      'line-color': '#27406b', 'line-width': 0.5,
-      'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.55, 2, 0.4, 5, 0.16, 8, 0.04]
+      'line-color': '#1d3350', 'line-width': 0.5,
+      'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.3, 2, 0.2, 5, 0.08, 8, 0.02]
     }
   };
   const graticuleMajor = {
     id: 'graticule-major', type: 'line', source: 'graticule',
     filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'major'], 1]],
-    paint: { 'line-color': '#3d5a8c', 'line-width': 0.8, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.7, 2, 0.5, 6, 0.12] }
+    paint: { 'line-color': '#2a4a73', 'line-width': 0.7, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.45, 2, 0.3, 6, 0.08] }
   };
   const graticuleLabel = {
     id: 'graticule-label', type: 'symbol', source: 'graticule',
     filter: ['==', ['geometry-type'], 'Point'],
     layout: { 'text-field': ['get', 't'], 'text-size': 9, 'text-allow-overlap': false, 'text-font': font },
     paint: {
-      'text-color': '#5b7399', 'text-halo-color': '#060a14', 'text-halo-width': 1,
-      'text-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.9, 3, 0.55, 6, 0]
+      'text-color': '#3d5a7d', 'text-halo-color': '#04060c', 'text-halo-width': 1,
+      'text-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.7, 3, 0.4, 6, 0]
     }
   };
   const countriesFill = {
@@ -287,27 +290,47 @@ function adaptStyle(base) {
     paint: {
       'fill-color': [
         'case',
-        ['boolean', ['feature-state', 'selected'], false], 'rgba(251,191,36,0.30)',
-        ['boolean', ['feature-state', 'hover'], false], 'rgba(56,189,248,0.20)',
+        ['boolean', ['feature-state', 'selected'], false], 'rgba(74,222,128,0.26)',
+        ['boolean', ['feature-state', 'hover'], false], 'rgba(96,165,250,0.16)',
         'rgba(0,0,0,0)'
       ],
       'fill-opacity': 1
     }
   };
+  // 国家边界发光（worldmonitor 风格：外圈柔光 + 内圈亮线）
+  const countriesGlow = {
+    id: 'countries-glow', type: 'line', source: 'countries',
+    paint: {
+      'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#4ade80', '#60a5fa'],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 0, 2.4, 6, 4.5],
+      'line-opacity': 0.15, 'line-blur': 2.2
+    }
+  };
   const countriesOutline = {
     id: 'countries-outline', type: 'line', source: 'countries',
     paint: {
-      'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#fbbf24', '#4a5f85'],
-      'line-width': 1, 'line-opacity': 0.85
+      'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#86efac', '#93c5fd'],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 0, 0.8, 6, 1.3],
+      'line-opacity': 0.9
+    }
+  };
+  // 城市发光点（外圈光晕 + 亮核），首都琥珀色
+  const cityGlow = {
+    id: 'city-glow', type: 'circle', source: 'cities',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 5, 2, 8, 5, 12],
+      'circle-color': ['case', ['==', ['get', 'cap'], 1], '#febc2e', '#60a5fa'],
+      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.14, 5, 0.22],
+      'circle-blur': 1
     }
   };
   const cityDots = {
     id: 'city-dots', type: 'circle', source: 'cities',
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 1.3, 2, 2.2, 5, 3.4],
-      'circle-color': ['case', ['==', ['get', 'cap'], 1], '#fbbf24', '#38bdf8'],
-      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.92, 5, 0.98],
-      'circle-stroke-color': '#0a1220',
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 1.4, 2, 2.3, 5, 3.4],
+      'circle-color': ['case', ['==', ['get', 'cap'], 1], '#fde68a', '#bfdbfe'],
+      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.95, 5, 1],
+      'circle-stroke-color': ['case', ['==', ['get', 'cap'], 1], '#92400e', '#1d4ed8'],
       'circle-stroke-width': 0.6
     }
   };
@@ -316,17 +339,17 @@ function adaptStyle(base) {
     paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 7, 5, 11], 'circle-opacity': 0 }
   };
   const cityLabels = {
-    id: 'city-labels', type: 'symbol', source: 'cities', minzoom: 2.2,
+    id: 'city-labels', type: 'symbol', source: 'cities', minzoom: 2.4,
     filter: ['any', ['==', ['get', 'cap'], 1], ['<=', ['get', 'r'], 2]],
     layout: {
       'text-field': ['get', 'n'],
       'text-size': 10.5, 'text-anchor': 'top', 'text-offset': [0, 0.7],
       'text-allow-overlap': false, 'text-font': font
     },
-    paint: { 'text-color': '#cfe0f5', 'text-halo-color': '#060a14', 'text-halo-width': 1.2 }
+    paint: { 'text-color': '#dff0ff', 'text-halo-color': '#04060c', 'text-halo-width': 1.3 }
   };
 
-  s.layers.push(graticule, graticuleMajor, graticuleLabel, countriesFill, countriesOutline, cityDots, cityDotsHit, cityLabels);
+  s.layers.push(graticule, graticuleMajor, graticuleLabel, countriesFill, countriesGlow, countriesOutline, cityGlow, cityDots, cityDotsHit, cityLabels);
   return s;
 }
 
@@ -354,8 +377,9 @@ function initMap() {
   }), 'bottom-right');
   state.map.on('load', () => {
     bindMapEvents();
-    tryTerrain(false);
-    $('projBtn').textContent = '3D';
+    // 3D 模式自动开启地貌（失败则静默跳过）
+    try { state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 }); } catch (e) { /* 不支持则忽略 */ }
+    $('projBtn').textContent = '2D/3D';
     $('projBtn').classList.add('on');
     $('projBtn').title = '切换为 2D 平面地图';
   });
@@ -367,31 +391,22 @@ function initMap() {
   });
 }
 
-function tryTerrain(on) {
-  if (!state.map || !state.map.isStyleLoaded()) return;
-  try {
-    if (on) state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.3 });
-    else state.map.setTerrain(null);
-    state.terrainOn = on;
-    $('terrainBtn').classList.toggle('on', on);
-  } catch (e) {
-    toast('当前设备不支持 3D 地貌');
-    $('terrainBtn').classList.remove('on');
-  }
-}
-
-// 2D 平面 / 3D 地球仪切换（两种模式都支持手指转动、双指缩放）
+// 2D 平面 / 3D 地球仪切换（一个按钮：3D=立体地球+地貌，2D=平面地图）
 function setProjection(t) {
   if (!state.map) return;
   state.projection = t;
   try {
     state.map.setProjection(t);
-    if (t === 'mercator') state.map.setPitch(0);
+    if (t === 'globe') {
+      try { state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 }); } catch (e) { /* ignore */ }
+    } else {
+      state.map.setPitch(0);
+      try { state.map.setTerrain(null); } catch (e) { /* ignore */ }
+    }
   } catch (e) {
-    toast('投影切换失败');
+    toast('切换失败');
     return;
   }
-  $('projBtn').textContent = t === 'globe' ? '3D' : '2D';
   $('projBtn').classList.toggle('on', t === 'globe');
   $('projBtn').title = t === 'globe' ? '切换为 2D 平面地图' : '切换为 3D 地球仪';
 }
@@ -548,6 +563,7 @@ function sheetTitle(sel) {
 
 async function loadNews(sel) {
   const reqId = ++state.newsReqId;
+  state.newsCat = 'ALL'; // 切换地点时重置板块过滤
   renderSheetStatus(spinnerEl(), '正在加载当地新闻…');
 
   // 静态模式：直接查云端定时生成的新闻快照
@@ -562,8 +578,10 @@ async function loadNews(sel) {
     return;
   }
 
+  // 服务器模式：实时接口 8s 内返回则用实时新闻；同时并行准备静态兜底，避免傻等
+  const staticP = newsFromStatic(sel).catch(() => null);
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000); // 客户端超时（服务器最多 25s 兜底）
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
     const r = await fetch(`api/news?q=${encodeURIComponent(sel.q)}&lang=${state.lang}`, { signal: ctrl.signal });
     const j = await r.json();
@@ -572,10 +590,9 @@ async function loadNews(sel) {
     renderNews(j);
   } catch (e) {
     if (reqId !== state.newsReqId) return;
-    // 服务器模式失败时退回静态快照
-    const snap = await newsFromStatic(sel);
+    const snap = await staticP;
     if (snap && snap.items.length) { renderNews({ ...snap, fallback: 'static' }); return; }
-    const msg = (e.name === 'AbortError') ? '加载超时，请检查网络后重试' : (e.message || '加载失败');
+    const msg = (e.name === 'AbortError') ? '实时新闻源响应慢，且暂无离线数据' : (e.message || '加载失败');
     const box = renderSheetStatus('😢', msg, '点击下方按钮重试');
     const retry = el('button', 'chip', '↻ 重试');
     retry.style.marginTop = '4px';
@@ -587,23 +604,33 @@ async function loadNews(sel) {
   }
 }
 
-/* ---- 静态新闻快照（data/news-hot.json，由云端定时抓取生成）---- */
+/* ---- 静态新闻（data/news-hot.json 小索引 + n/*.json 按需分片，点开即秒） ---- */
 let staticIndexPromise = null;
-function getStaticNewsIndex() {
+let entryCache = null;
+function getStaticIndex() {
   if (!staticIndexPromise) {
+    entryCache = new Map();
     staticIndexPromise = fetch('data/news-hot.json')
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
   }
   return staticIndexPromise;
 }
+async function getEntryFile(f) {
+  if (!entryCache) await getStaticIndex();
+  if (!f) return null;
+  if (entryCache.has(f)) return entryCache.get(f);
+  const p = fetch(`data/${f}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  entryCache.set(f, p);
+  return p;
+}
 
 async function newsFromStatic(sel) {
-  const idx = await getStaticNewsIndex();
+  const idx = await getStaticIndex();
   if (!idx || !idx.entries) return null;
   const lang = state.lang;
   const tries = [];
-  const push = (k) => { const e = idx.entries[k]; if (e && e.items && e.items.length) tries.push(e); };
+  const push = (k) => { const e = idx.entries[k]; if (e && !tries.includes(e)) tries.push(e); };
   if (sel.type === 'country') {
     push(`country|${sel.iso2}|${lang}`);
     push(`country|${sel.iso2}|en`);
@@ -617,25 +644,53 @@ async function newsFromStatic(sel) {
     push(`place|${(sel.name || sel.nameZh || '').toLowerCase()}|${lang}`);
     push(`place|${(sel.name || sel.nameZh || '').toLowerCase()}|en`);
   }
-  if (tries.length) return { ...tries[0], fetchedAt: idx.generatedAt };
-  // 兜底：标题全文匹配（直接扫全部条目的新闻）
+  for (const e of tries) {
+    const entry = await getEntryFile(e.f);
+    if (entry && entry.items && entry.items.length) return { ...entry, fetchedAt: idx.generatedAt };
+  }
+  // 兜底：标题全文匹配（懒加载 titles 索引）
   const ql = sel.q.toLowerCase();
   if (ql) {
-    const hits = [];
-    const entries = idx.entries || {};
-    for (const k in entries) {
-      const e = entries[k];
-      for (const it of e.items || []) {
-        if ((it.title || '').toLowerCase().includes(ql)) hits.push(it);
-        if (hits.length >= 20) break;
+    const ti = await fetch('data/news-titles.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (ti && ti.items) {
+      const hits = ti.items.filter((it) => (it.t || '').toLowerCase().includes(ql)).slice(0, 20);
+      if (hits.length) {
+        return {
+          window: 'scan', label: '全文匹配',
+          items: hits.map((h) => ({ title: h.t, link: h.l, source: '', published: h.p || '', snippet: '', cat: h.cat, loc: h.loc })),
+          fetchedAt: idx.generatedAt
+        };
       }
-      if (hits.length >= 20) break;
-    }
-    if (hits.length) {
-      return { window: 'scan', label: '全文匹配', items: hits, fetchedAt: idx.generatedAt };
     }
   }
   return null;
+}
+
+/* ---- 英文→中文翻译（免费接口，按需排队，缓存） ---- */
+const transCache = new Map();
+let transQueue = Promise.resolve();
+function translateText(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length < 3) return Promise.resolve('');
+  if (transCache.has(t)) return Promise.resolve(transCache.get(t));
+  const p = transQueue.then(async () => {
+    try {
+      const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(t.slice(0, 1500))}`);
+      const j = await r.json();
+      const out = (j && j[0] ? j[0].map((x) => x[0]).join('') : '').trim();
+      transCache.set(t, out);
+      return out;
+    } catch (e) { return ''; }
+  });
+  transQueue = p.catch(() => {});
+  return p;
+}
+const isEn = (s) => /[a-zA-Z]{4}/.test(s || '') && !/[\u4e00-\u9fff]/.test(s || '');
+function attachTranslation(a, text) {
+  if (!isEn(text)) return;
+  const slot = a.querySelector('.a-tz');
+  if (!slot) return;
+  translateText(text).then((zh) => { if (zh && slot && slot.parentNode) slot.textContent = zh; });
 }
 
 function relTime(iso) {
@@ -646,6 +701,29 @@ function relTime(iso) {
   if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
   if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
   return `${Math.floor(s / 86400)} 天前`;
+}
+
+/* ---- A-Y 板块元信息（标签/标题，供前端展示） ---- */
+const SECTORS_META = [
+  { key: 'A', title: '时政/官方/政策/法规', icon: '🏛️' }, { key: 'B', title: '外交/国际关系/地缘政治/地区冲突', icon: '🌍' },
+  { key: 'C', title: '军事/国防/战争/军工', icon: '🪖' }, { key: 'D', title: '财经/金融/市场/股市/公司/IPO/央行/外汇', icon: '📈' },
+  { key: 'E', title: '宏观经济/经济数据/经济政策', icon: '📊' }, { key: 'F', title: '科技/AI/半导体/互联网', icon: '🤖' },
+  { key: 'G', title: '能源/石油/天然气/新能源', icon: '🛢️' }, { key: 'H', title: '贵金属/稀土/有色/大宗商品', icon: '🥇' },
+  { key: 'I', title: '医药/生物科技/医疗健康', icon: '💊' }, { key: 'J', title: '人物/观点/深度评论', icon: '✍️' },
+  { key: 'K', title: '国际综合/突发/快讯', icon: '🌐' }, { key: 'L', title: '中东/区域专报', icon: '🕌' },
+  { key: 'M', title: '气候/环境/可持续发展', icon: '🌱' }, { key: 'N', title: '航天/航空/交通物流', icon: '🚀' },
+  { key: 'O', title: '汽车/新能源车/出行', icon: '🚗' }, { key: 'P', title: '房地产/基建/城市化', icon: '🏗️' },
+  { key: 'Q', title: '农业/食品/农产品', icon: '🌾' }, { key: 'R', title: '加密货币/数字资产/区块链', icon: '🪙' },
+  { key: 'S', title: '法律/监管/合规/制裁', icon: '⚖️' }, { key: 'T', title: '社会/文化/教育/体育/娱乐', icon: '🎭' },
+  { key: 'U', title: '数据/报告/智库研究', icon: '📑' }, { key: 'V', title: '港澳台/区域新闻', icon: '🏙️' },
+  { key: 'W', title: '网络安全/隐私/数字治理', icon: '🛡️' }, { key: 'X', title: '公共卫生/灾害/应急', icon: '🚑' },
+  { key: 'Y', title: '移民/难民/人道主义', icon: '🕊️' }
+];
+const CAT_COLORS = ['#38bdf8', '#fbbf24', '#f472b6', '#34d399', '#a78bfa', '#f87171', '#60a5fa', '#facc15', '#4ade80', '#fb923c'];
+const catColor = (key) => CAT_COLORS[((key.charCodeAt(0) - 65) % CAT_COLORS.length + CAT_COLORS.length) % CAT_COLORS.length];
+function catChips(cats) {
+  if (!cats || !cats.length) return '';
+  return cats.slice(0, 3).map((c) => `<span class="cat-badge" style="background:${catColor(c)}">${c}</span>`).join('');
 }
 
 function renderNews(data) {
@@ -671,13 +749,35 @@ function renderNews(data) {
       `<div class="s-sub">可切换新闻语言（中文 / English）或点击邻近城市试试</div>`));
     return;
   }
+  // 板块过滤条
+  const cats = [...new Set(data.items.flatMap((it) => it.cat || []))].sort();
+  if (cats.length) {
+    const bar = el('div', 'news-filter');
+    const mk = (key, label) => {
+      const b = el('button', 'nf-chip' + (state.newsCat === key ? ' on' : ''), label);
+      b.addEventListener('click', () => { state.newsCat = key; renderNews(data); });
+      bar.appendChild(b);
+    };
+    mk('ALL', '全部');
+    for (const c of cats) mk(c, c);
+    body.appendChild(bar);
+  }
+  const items = (state.newsCat && state.newsCat !== 'ALL')
+    ? data.items.filter((it) => (it.cat || []).includes(state.newsCat))
+    : data.items;
+  if (!items.length) {
+    body.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该板块暂无内容</div>'));
+    return;
+  }
   const today = new Date().toDateString();
-  for (const it of data.items) {
+  for (const it of items) {
     const isNew = new Date(it.published).toDateString() === today;
     const a = el('a', 'article', `
       <div class="a-title">${esc(it.title)}</div>
+      <div class="a-tz"></div>
       ${it.snippet ? `<div class="a-snippet">${esc(it.snippet)}</div>` : ''}
       <div class="a-meta">
+        ${catChips(it.cat)}
         ${it.source ? `<span class="a-src">${esc(it.source)}</span>` : ''}
         ${isNew ? '<span class="a-new">今日</span>' : ''}
         <span>${relTime(it.published)}</span>
@@ -687,6 +787,7 @@ function renderNews(data) {
     a.target = '_blank';
     a.rel = 'noopener';
     body.appendChild(a);
+    attachTranslation(a, it.title);
   }
 }
 
@@ -841,6 +942,85 @@ function highlightListCountry(iso2) {
   }
 }
 
+/* ---------------- 板块视图（A-Y 分类浏览，懒加载 news-sectors.json） ---------------- */
+let sectorDataPromise = null;
+function getSectorData() {
+  if (!sectorDataPromise) {
+    sectorDataPromise = fetch('data/news-sectors.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return sectorDataPromise;
+}
+
+async function renderSectors() {
+  const tabs = $('sectorTabs');
+  const list = $('sectorList');
+  tabs.innerHTML = '';
+  list.innerHTML = '';
+  renderSectorStatus(list, '⏳', '正在汇总板块新闻…', '');
+  const data = await getSectorData();
+  if (!data || !data.sectors) {
+    renderSectorStatus(list, '📭', '暂无板块数据', '静态新闻数据未生成（请运行云端抓取，或访问公网版）');
+    return;
+  }
+  const buckets = data.sectors;
+  const total = Object.values(buckets).reduce((n, a) => n + a.length, 0);
+  const mk = (key, label) => {
+    const b = el('button', 'sector-tab' + (state.sectorSel === key ? ' on' : ''), label);
+    b.addEventListener('click', () => { state.sectorSel = key; renderSectorsList(buckets); });
+    tabs.appendChild(b);
+  };
+  mk('ALL', `全部 ${total}`);
+  for (const s of SECTORS_META) {
+    const n = (buckets[s.key] || []).length;
+    mk(s.key, `${s.key} ${s.icon}${n ? `<span class="cnt">${n}</span>` : ''}`);
+  }
+  renderSectorsList(buckets);
+}
+
+function renderSectorStatus(list, icon, msg, sub) {
+  list.innerHTML = '';
+  list.appendChild(el('div', 'status',
+    `<div class="s-icon">${icon}</div><div class="s-msg">${esc(msg)}</div>` +
+    (sub ? `<div class="s-sub">${esc(sub)}</div>` : '')));
+}
+
+function renderSectorsList(buckets) {
+  const list = $('sectorList');
+  const sel = state.sectorSel;
+  const items = (sel === 'ALL' ? Object.values(buckets).flat() : (buckets[sel] || [])) || [];
+  list.innerHTML = '';
+  if (sel !== 'ALL') {
+    const s = SECTORS_META.find((x) => x.key === sel);
+    if (s) list.appendChild(el('div', 'sector-head', `${s.icon} 板块 ${s.key} · ${s.title}`));
+  }
+  if (!items.length) {
+    list.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该板块暂无新闻</div>'));
+    return;
+  }
+  const today = new Date().toDateString();
+  for (const it of items) {
+    const isNew = new Date(it.p).toDateString() === today;
+    const a = el('a', 'article', `
+      <div class="a-title">${esc(it.t)}</div>
+      <div class="a-tz"></div>
+      ${it.sn ? `<div class="a-snippet">${esc(it.sn)}</div>` : ''}
+      <div class="a-meta">
+        ${catChips([sel === 'ALL' ? '' : sel].filter(Boolean))}
+        ${it.loc ? `<span class="s-loc">📍 ${esc(it.loc)}</span>` : ''}
+        ${it.s ? `<span class="a-src">${esc(it.s)}</span>` : ''}
+        ${isNew ? '<span class="a-new">今日</span>' : ''}
+        <span>${relTime(it.p)}</span>
+      </div>`);
+    a.href = it.l;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    list.appendChild(a);
+    attachTranslation(a, it.t);
+  }
+}
+
 /* ---------------- 搜索 ---------------- */
 function doSearch(text) {
   const q = text.toLowerCase();
@@ -967,7 +1147,6 @@ function bindUI() {
   $('homeBtn').addEventListener('click', () => {
     if (state.map) state.map.flyTo({ center: [18, 24], zoom: 1.05, duration: 1200, essential: true });
   });
-  $('terrainBtn').addEventListener('click', () => tryTerrain(!state.terrainOn));
   $('projBtn').addEventListener('click', () => setProjection(state.projection === 'globe' ? 'mercator' : 'globe'));
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
@@ -1021,5 +1200,6 @@ function registerSW() {
   }
   // 调试/测试钩子
   window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map };
+  if (state.mode === 'static') getStaticIndex(); // 静态模式：后台预取小索引，点新闻即秒开
   registerSW();
 })();

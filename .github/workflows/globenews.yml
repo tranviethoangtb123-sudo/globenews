@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '0 23 * * *'
     - cron: '0 4 * * *'
-    - cron: '0 8 * * *'
+    - cron: '0 10 * * *'   # 北京时间 07:00 / 12:00 / 18:00
   push:
     branches: [main]
   workflow_dispatch:

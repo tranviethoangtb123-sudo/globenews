@@ -11,6 +11,7 @@ import { mkdirSync, existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classifyCategories } from './classify-news.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // 数据目录自动探测（public/data 或 data），随站点发布时数据在 public/data
@@ -100,7 +101,7 @@ function parseRssItems(xml) {
     const { title: t2, source } = splitSource(decodeXml(title));
     let snippet = extractSnippet(decodeXml(desc));
     if (source && snippet.endsWith('  ' + source)) snippet = snippet.slice(0, snippet.length - source.length - 2).trim();
-    items.push({ title: t2, link: decodeXml(link), source, published: pub, snippet });
+    items.push({ title: t2, link: decodeXml(link), source, published: pub, snippet, cat: classifyCategories(t2 + ' ' + snippet).slice(0, 3) });
   }
   const uniq = [...new Map(items.map((i) => [i.link, i])).values()];
   uniq.sort((a, b) => new Date(b.published || 0) - new Date(a.published || 0));
@@ -133,13 +134,13 @@ const cities = JSON.parse(await readFile(join(DATA, 'cities.json'), 'utf8'));
 
 const queries = [];
 for (const c of countries) {
-  queries.push({ key: `country|${c.iso2}|en`, q: c.name });
-  if (c.pop >= 5000000) queries.push({ key: `country|${c.iso2}|zh`, q: c.zh }); // 人口前 ~80 国家附中文
+  queries.push({ key: `country|${c.iso2}|en`, q: c.name, loc: c.name });
+  if (c.pop >= 5000000) queries.push({ key: `country|${c.iso2}|zh`, q: c.zh, loc: c.zh }); // 人口前 ~80 国家附中文
 }
 const topCities = cities.filter((c) => c.cap === 1 || c.pop >= 500000).sort((a, b) => b.pop - a.pop).slice(0, 220);
 for (const c of topCities) {
-  queries.push({ key: `city|${c.n.toLowerCase()}|en`, q: c.n });
-  if (c.z) queries.push({ key: `city|${c.z.toLowerCase()}|zh`, q: c.z });
+  queries.push({ key: `city|${c.n.toLowerCase()}|en`, q: c.n, loc: c.n });
+  if (c.z) queries.push({ key: `city|${c.z.toLowerCase()}|zh`, q: c.z, loc: c.z });
 }
 const list0 = LIMIT ? queries.slice(0, LIMIT) : queries;
 const list = ONLY ? list0.filter((x) => ONLY.some((k) => x.key.toLowerCase().includes(k.toLowerCase()) || x.q.toLowerCase().includes(k.toLowerCase()))) : list0;
@@ -150,12 +151,12 @@ const entries = {};
 const t0 = Date.now();
 let ok = 0, fail = 0;
 for (let i = 0; i < list.length; i++) {
-  const { key, q } = list[i];
+  const { key, q, loc } = list[i];
   const lang = key.endsWith('|zh') ? 'zh' : 'en';
   try {
     const res = await fetchLocation(q, lang);
     if (res.items.length) {
-      entries[key] = { window: res.window, label: res.label, fetchedAt: new Date().toISOString(), items: res.items };
+      entries[key] = { window: res.window, label: res.label, fetchedAt: new Date().toISOString(), loc, items: res.items };
       ok++;
     }
   } catch (e) {
@@ -168,8 +169,37 @@ for (let i = 0; i < list.length; i++) {
   await sleep(350); // 限速，避免触发反爬
 }
 
-const newsHot = { generatedAt: new Date().toISOString(), count: ok, entries };
-await writeFile(join(OUT, 'news-hot.json'), JSON.stringify(newsHot));
+/* ---------- 输出：小索引 + 按需分片 + 标题扫描索引 + 板块聚合（点开才下载，秒开） ---------- */
+const OUT_N = join(OUT, 'n');
+mkdirSync(OUT_N, { recursive: true });
+const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36); };
+
+const index = { generatedAt: new Date().toISOString(), count: ok, entries: {} };
+const titles = [];
+const sectors = {};
+const seenLink = new Set();
+for (const key in entries) {
+  const e = entries[key];
+  const fname = `${hash(key)}.json`;
+  await writeFile(join(OUT_N, fname), JSON.stringify(e));
+  index.entries[key] = { f: `n/${fname}`, loc: e.loc, window: e.window, label: e.label, n: e.items.length };
+  for (const it of e.items) {
+    if (!it.link || seenLink.has(it.link)) continue;
+    seenLink.add(it.link);
+    titles.push({ t: it.title, l: it.link, loc: e.loc, cat: it.cat, p: it.published });
+    for (const c of it.cat || []) {
+      (sectors[c] = sectors[c] || []).push({ t: it.title, l: it.link, loc: e.loc, s: it.source, p: it.published, sn: it.snippet });
+    }
+  }
+}
+await writeFile(join(OUT, 'news-hot.json'), JSON.stringify(index)); // 索引很小，启动即拉取
+await writeFile(join(OUT, 'news-titles.json'), JSON.stringify({ generatedAt: index.generatedAt, items: titles })); // 任意地名全文扫描（懒加载）
+for (const c in sectors) {
+  sectors[c].sort((a, b) => new Date(b.p || 0) - new Date(a.p || 0));
+  if (sectors[c].length > 60) sectors[c] = sectors[c].slice(0, 60);
+}
+await writeFile(join(OUT, 'news-sectors.json'), JSON.stringify({ generatedAt: index.generatedAt, sectors })); // 板块视图（懒加载）
+console.log(`[fetch] 输出分片 ${Object.keys(index.entries).length} 个 / 标题索引 ${titles.length} / 板块 ${Object.keys(sectors).length} 类`);
 
 /* ---------- 固化当前瓦片地址（供静态模式直连） ---------- */
 if (!SKIP_TILES) {
@@ -183,4 +213,4 @@ if (!SKIP_TILES) {
   } catch (e) { console.warn('[fetch] 瓦片地址获取失败（静态模式将使用默认模板）:', e.message); }
 }
 
-console.log(`[fetch] 完成 ✓ 地点=${ok} 全部条目=${all.length} 写入 news-hot.json（${(newsHot.length || 0) > 0 ? '' : ''}${(Buffer.byteLength(JSON.stringify(newsHot)) / 1024).toFixed(0)}KB）`);
+console.log(`[fetch] 完成 ✓ 地点=${ok} 全部条目=${titles.length}`);
