@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#060a14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="环球新闻地球仪：全球 250 个国家与地区、上千座城市的今日新闻可视化。">
+<title>环球新闻地球仪 · Globe News</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div class="brand">🌍<span>环球新闻</span></div>
+    <div class="seg" id="viewToggle">
+      <button data-view="globe" class="on">地球仪</button>
+      <button data-view="list">列表</button>
+    </div>
+    <button id="langBtn" class="chip" title="切换新闻语言">EN</button>
+  </header>
+
+  <div id="searchWrap">
+    <input id="searchInput" type="search" autocomplete="off" placeholder="🔍 搜索国家 / 城市（如：东京、New York、北京…）">
+    <div id="searchResults" class="hidden"></div>
+  </div>
+
+  <div id="hotChips" class="hidden"></div>
+
+  <main>
+    <div id="globeView">
+      <div id="map"></div>
+      <div id="mapHint">拖动旋转 · 双指缩放 · 点城市/国家看新闻 · 可切 2D/3D</div>
+      <button id="homeBtn" title="回到全球视角">⌂</button>
+      <button id="terrainBtn" class="off" title="切换 3D 地貌">⛰ 3D地形</button>
+      <button id="projBtn" title="切换 2D 平面 / 3D 地球仪">3D</button>
+    </div>
+    <div id="listView" class="hidden"></div>
+  </main>
+
+  <div id="sheet" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div id="sheetHead">
+      <div id="sheetTitle"></div>
+      <span id="sheetBadge" class="hidden"></span>
+      <div class="sheet-actions">
+        <button id="sheetRefresh" title="刷新">↻</button>
+        <button id="sheetClose" title="关闭">✕</button>
+      </div>
+    </div>
+    <div id="sheetBody"></div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

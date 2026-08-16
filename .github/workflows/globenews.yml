@@ -1,0 +1,46 @@
+name: GlobeNews Build & Deploy
+
+on:
+  schedule:
+    - cron: '0 23 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 8 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: globenews-pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch hot news (cloud, ~10-20 min)
+        run: node scripts/fetch-hot-news.mjs
+        timeout-minutes: 45
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to Pages
+        uses: actions/deploy-pages@v4
