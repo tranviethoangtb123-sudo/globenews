@@ -124,7 +124,7 @@ async function fetchLocation(q, lang) {
     } catch (e) { lastErr = e; }
   }
   if (!best.items.length && lastErr) throw lastErr;
-  return { ...best, items: best.items.slice(0, 15) };
+  return { ...best, items: best.items.slice(0, 12) };
 }
 
 /* ---------- 生成查询清单 ---------- */
@@ -147,7 +147,6 @@ console.log(`[fetch] 查询清单 ${list.length} 条（国家 ${countries.length
 
 /* ---------- 抓取 ---------- */
 const entries = {};
-const all = [];
 const t0 = Date.now();
 let ok = 0, fail = 0;
 for (let i = 0; i < list.length; i++) {
@@ -157,7 +156,6 @@ for (let i = 0; i < list.length; i++) {
     const res = await fetchLocation(q, lang);
     if (res.items.length) {
       entries[key] = { window: res.window, label: res.label, fetchedAt: new Date().toISOString(), items: res.items };
-      for (const it of res.items) all.push({ t: it.title, l: it.link, s: it.source, p: it.published, sn: it.snippet });
       ok++;
     }
   } catch (e) {
@@ -170,7 +168,7 @@ for (let i = 0; i < list.length; i++) {
   await sleep(350); // 限速，避免触发反爬
 }
 
-const newsHot = { generatedAt: new Date().toISOString(), count: ok, entries, all };
+const newsHot = { generatedAt: new Date().toISOString(), count: ok, entries };
 await writeFile(join(OUT, 'news-hot.json'), JSON.stringify(newsHot));
 
 /* ---------- 固化当前瓦片地址（供静态模式直连） ---------- */

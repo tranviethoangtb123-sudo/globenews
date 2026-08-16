@@ -618,16 +618,21 @@ async function newsFromStatic(sel) {
     push(`place|${(sel.name || sel.nameZh || '').toLowerCase()}|en`);
   }
   if (tries.length) return { ...tries[0], fetchedAt: idx.generatedAt };
-  // 兜底：标题全文匹配
+  // 兜底：标题全文匹配（直接扫全部条目的新闻）
   const ql = sel.q.toLowerCase();
-  if (ql && idx.all && idx.all.length) {
-    const hits = idx.all.filter((it) => (it.t || '').toLowerCase().includes(ql)).slice(0, 20);
+  if (ql) {
+    const hits = [];
+    const entries = idx.entries || {};
+    for (const k in entries) {
+      const e = entries[k];
+      for (const it of e.items || []) {
+        if ((it.title || '').toLowerCase().includes(ql)) hits.push(it);
+        if (hits.length >= 20) break;
+      }
+      if (hits.length >= 20) break;
+    }
     if (hits.length) {
-      return {
-        window: 'scan', label: '全文匹配',
-        items: hits.map((h) => ({ title: h.t, link: h.l, source: h.s || '', published: h.p || '', snippet: h.sn || '' })),
-        fetchedAt: idx.generatedAt
-      };
+      return { window: 'scan', label: '全文匹配', items: hits, fetchedAt: idx.generatedAt };
     }
   }
   return null;
