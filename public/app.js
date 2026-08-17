@@ -392,10 +392,7 @@ function initMap() {
     applyLabelLang();
     try { state.map.setProjection({ type: 'globe' }); } catch (e) { /* 保持默认 */ } // 强制 3D 球体
     try { state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 }); } catch (e) { /* 不支持则忽略 */ }
-    // 矢量地图拉远到一定程度自动回到夜景
-    state.map.on('zoomend', () => {
-      if (state.mapMode === 'vector' && state.map && state.map.getZoom() < 3.0) switchToNight();
-    });
+    // 放大/缩小自由进行（夜景球不切换地图）
   });
   state.map.on('error', (e) => {
     window.__mapErrors = window.__mapErrors || [];
@@ -511,7 +508,6 @@ function initGlobe() {
   state.globe = new NightEarth($('map'), {
     data: { borders: state.geo, cities: state.cities, countries: state.countries },
     utcEl: $('utcClock'),
-    onZoomIn: () => switchToVector(), // 放大到街道级别 → 自动切矢量地图
     onCityClick: (city) => selectCity(city),
     onCountryClick: (props) => {
       const iso2 = props && props.iso2;
@@ -521,7 +517,7 @@ function initGlobe() {
     },
     onMarkerClick: () => { if (bj) selectCity(bj); }
   });
-  state.globe.renderer.domElement.style.display = 'block';
+  $('utcClock').style.display = 'block';
 }
 
 // 矢量地图懒加载（MapLibre 约 1MB，首次切到矢量时才动态加载，加速首屏）
@@ -535,64 +531,7 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
-function ensureMap() {
-  if (state.map) return Promise.resolve();
-  if (mapLoading) return mapLoading;
-  mapLoading = (async () => {
-    await loadVectorAssets();
-    if (typeof maplibregl === 'undefined') {
-      await loadScript('vendor/maplibre-gl.js');
-    }
-    if (!document.querySelector('link[href="vendor/maplibre-gl.css"]')) {
-      const l = document.createElement('link');
-      l.rel = 'stylesheet';
-      l.href = 'vendor/maplibre-gl.css';
-      document.head.appendChild(l);
-    }
-    initMap();
-  })().catch((e) => { console.error(e); toast('矢量地图加载失败，可继续使用夜景模式'); });
-  return mapLoading;
-}
-
-function showMode(mode) {
-  state.mapMode = mode;
-  if (state.map) state.map.getContainer().style.display = mode === 'vector' ? 'block' : 'none';
-  if (state.globe) state.globe.renderer.domElement.style.display = mode === 'night' ? 'block' : 'none';
-  $('utcClock').style.display = mode === 'night' ? 'block' : 'none';
-  $('nightBtn').textContent = mode === 'night' ? '🗺 矢量' : '🌙 夜景';
-}
-
-// 夜景 → 矢量（街道/路名）
-async function switchToVector() {
-  if (state.mapMode === 'vector') return;
-  toast('正在加载街道地图…');
-  await ensureMap();
-  if (!state.map) { toast('街道地图加载失败，请稍后重试'); return; }
-  const [lon, lat] = state.globe ? state.globe.getCenterLonLat() : [18, 24];
-  const zoom = 6.5;
-  showMode('vector');
-  setTimeout(() => {
-    state.map.jumpTo({ center: [lon, lat], zoom });
-  }, 120);
-}
-
-// 矢量 → 夜景（拉远自动回到夜景）
-function switchToNight() {
-  if (state.mapMode === 'night') return;
-  if (!state.globe) initGlobe();
-  if (!state.globe) return;
-  const c = state.map ? state.map.getCenter() : { lng: 18, lat: 24 };
-  showMode('night');
-  state.globe.setView(c.lng, c.lat, 2.6);
-}
-
-// 手动切换
-function toggleGlobeMode() {
-  if (state.mapMode === 'night') switchToVector();
-  else switchToNight();
-}
-
-// 地图标签语言：中文=地名用 name:zh；英文=保持英文
+// 地图标签语言：中文=地名用 name:zh；英文=保持英文（仅矢量地图使用，夜景无此需求）
 function applyLabelLang() {
   if (!state.map || !state.map.isStyleLoaded()) return;
   const zh = state.lang === 'zh';
@@ -611,17 +550,11 @@ function applyLabelLang() {
   } catch (e) { /* ignore */ }
 }
 
-// 传 zoom 语义值；矢量=缩放级别，夜景=换算相机距离
+// 飞到某地（夜景球）
 function flyTo(coords, zoom) {
-  if (!coords) return;
-  if (state.mapMode === 'vector') {
-    if (!state.map) return;
-    state.map.flyTo({ center: coords, zoom: zoom || 3, duration: 1800, essential: true });
-  } else {
-    if (!state.globe) return;
-    const dist = Math.max(1.62, Math.min(2.8, 3.2 - (zoom || 3) * 0.22));
-    state.globe.flyTo(coords[0], coords[1], dist);
-  }
+  if (!state.globe || !coords) return;
+  const dist = Math.max(1.15, Math.min(2.8, 3.2 - (zoom || 3) * 0.22));
+  state.globe.flyTo(coords[0], coords[1], dist);
 }
 
 function clearCountrySelected() {
@@ -645,13 +578,6 @@ function selectCountry(c, opts = {}) {
     q: queryName(c),
     coords: (c.lat != null && c.lng != null) ? [c.lng, c.lat] : null
   };
-  if (state.mapMode === 'vector' && state.map) {
-    const feat = state.geo.features.find((f) => f.properties.iso2 === c.iso2);
-    if (feat && feat.id != null) {
-      state.selectedGeoId = feat.id;
-      try { state.map.setFeatureState({ source: 'countries', id: feat.id }, { selected: true }); } catch (e) { /* ignore */ }
-    }
-  }
   if (opts.fly !== false && state.selected.coords) flyTo(state.selected.coords, zoomForCountry(c));
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
@@ -690,9 +616,9 @@ function sheetTitle(sel) {
   }
   if (sel.type === 'city') {
     const en = sel.name && sel.name !== sel.nameZh ? ` · ${sel.name}` : '';
-    return `🏙️ ${sel.nameZh}${en}`;
+    return `${sel.nameZh}${en}`;
   }
-  return `📍 ${sel.nameZh}`;
+  return sel.nameZh;
 }
 
 async function loadNews(sel) {
@@ -1006,7 +932,7 @@ function renderList(filterText) {
       for (const c of res.countries) frag.appendChild(countryRow(c, true));
     }
     if (res.cities.length) {
-      frag.appendChild(el('div', 'sr-head', '🏙️ 城市'));
+      frag.appendChild(el('div', 'sr-head', '城市'));
       for (const c of res.cities) {
         const row = el('div', 'country-row');
         const co = state.countryByIso2.get(c.c);
@@ -1117,7 +1043,7 @@ async function renderSectors() {
   mk('ALL', `全部 ${total}`);
   for (const s of SECTORS_META) {
     const n = (buckets[s.key] || []).length;
-    mk(s.key, `${s.icon} ${secShort(s.key)}${n ? `<span class="cnt">${n}</span>` : ''}`);
+    mk(s.key, `${secShort(s.key)}${n ? `<span class="cnt">${n}</span>` : ''}`);
   }
   renderSectorsList(buckets);
 }
@@ -1136,7 +1062,7 @@ function renderSectorsList(buckets) {
   list.innerHTML = '';
   if (sel !== 'ALL') {
     const s = SECTORS_META.find((x) => x.key === sel);
-    if (s) list.appendChild(el('div', 'sector-head', `${s.icon} 板块 ${s.key} · ${s.title}`));
+    if (s) list.appendChild(el('div', 'sector-head', `板块 ${s.key} · ${s.title}`));
   }
   if (!items.length) {
     list.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该板块暂无新闻</div>'));
@@ -1150,7 +1076,7 @@ function renderSectorsList(buckets) {
       <div class="a-tz"></div>
       ${it.sn ? `<div class="a-snippet">${esc(it.sn)}</div>` : ''}
       <div class="a-meta">
-        ${it.loc ? `<span class="s-loc">📍 ${esc(it.loc)}</span>` : ''}
+        ${it.loc ? `<span class="s-loc">${esc(String(it.loc).replace(/^📰\s*/, ''))}</span>` : ''}
         ${it.s ? `<span class="a-src">${esc(it.s)}</span>` : ''}
         ${isNew ? '<span class="a-new">今日</span>' : ''}
         <span>${relTime(it.p)}</span>
@@ -1274,7 +1200,7 @@ function renderSearchDropdown(text) {
     }
   }
   if (res.cities.length) {
-    box.appendChild(el('div', 'sr-head', '🏙️ 城市'));
+    box.appendChild(el('div', 'sr-head', '城市'));
     for (const c of res.cities) {
       const co = state.countryByIso2.get(c.c);
       const item = el('div', 'sr-item', `<span class="sr-flag">${co ? co.emoji : '📍'}</span>
@@ -1352,13 +1278,8 @@ function bindUI() {
   });
 
   $('homeBtn').addEventListener('click', () => {
-    if (state.mapMode === 'vector' && state.map) {
-      state.map.flyTo({ center: [18, 24], zoom: 1.05, duration: 1200, essential: true });
-    } else if (state.globe) {
-      state.globe.reset();
-    }
+    if (state.globe) state.globe.reset();
   });
-  $('nightBtn').addEventListener('click', () => toggleGlobeMode());
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
 }
@@ -1393,7 +1314,6 @@ function registerSW() {
     await loadData();               // 国家+城市+多边形（并行小文件，约 1s）
     renderList('');
     initGlobe();                    // 球体秒现（兜底材质），夜景灯光加载后渐入
-    showMode('night');
     // 后台预取板块/来源数据，点开即用
     getSectorData();
     getSourceData();
@@ -1402,7 +1322,7 @@ function registerSW() {
     toast('数据加载失败，请确认已运行 node scripts/setup-data.mjs');
   }
   // 调试/测试钩子
-  window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map, getGlobe: () => state.globe, showMode };
+  window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map, getGlobe: () => state.globe };
   if (state.mode === 'static') getStaticIndex(); // 静态模式：后台预取小索引，点新闻即秒开
   registerSW();
 })();
