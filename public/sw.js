@@ -1,18 +1,14 @@
 /* 环球新闻地球仪 Service Worker
- * 策略：大体积稳定资源（vendor/three、textures、fonts）缓存优先 → 二次打开秒开；
- *      代码与数据（index/app.js/night-earth.js/data/*）网络优先 → 改动即时生效 */
-const VERSION = 'gn-v3';
+ * 策略：大体积稳定资源（vendor/maplibre-gl、fonts）缓存优先 → 二次打开秒开；
+ *      代码与数据（index/app.js/app.css/data/*）网络优先 → 改动即时生效 */
+const VERSION = 'gn-v4';
 const STATIC = [
   './',
   './index.html',
   './app.css',
   './app.js',
-  './night-earth.js',
   './manifest.json',
-  './vendor/three/three.min.js',
-  './vendor/three/OrbitControls.js',
-  './textures/earth-day.jpg',
-  './textures/earth-night.jpg',
+  './vendor/maplibre-gl.js',
   './fonts/fonts.css',
   './fonts/inter-400.woff2',
   './fonts/inter-600.woff2',
@@ -49,7 +45,7 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname.startsWith('/api/')) return;     // API 走网络
 
   // 代码与数据：网络优先（改动即时生效），失败回退缓存
-  const isFresh = /\/data\//.test(url.pathname) || /(index\.html|app\.(css|js)|night-earth\.js)/.test(url.pathname) || url.pathname === '/' || url.pathname.endsWith('/');
+  const isFresh = /\/data\//.test(url.pathname) || /(index\.html|app\.(css|js))/.test(url.pathname) || url.pathname === '/' || url.pathname.endsWith('/');
   if (isFresh) {
     e.respondWith(
       fetch(req)

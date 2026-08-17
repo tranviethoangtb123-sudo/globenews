@@ -26,8 +26,6 @@ const state = {
   styleBase: null,
   tileTiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'],
   map: null,
-  globe: null,
-  mapMode: 'night', // night(夜景地球,默认) | vector(矢量地图：街道/路名)
   projection: 'globe',
   selected: null,
   selectedGeoId: null,
@@ -44,13 +42,13 @@ const state = {
 
 /* ---------------- 基础数据 ---------------- */
 const CONTINENTS = [
-  { id: 'asia', zh: '亚洲', en: 'Asia', icon: '🗺️' },
-  { id: 'europe', zh: '欧洲', en: 'Europe', icon: '🏰' },
-  { id: 'africa', zh: '非洲', en: 'Africa', icon: '🦁' },
-  { id: 'namerica', zh: '北美洲', en: 'North America', icon: '🏔️' },
-  { id: 'samerica', zh: '南美洲', en: 'South America', icon: '🌴' },
-  { id: 'oceania', zh: '大洋洲', en: 'Oceania', icon: '🦘' },
-  { id: 'polar', zh: '南极洲', en: 'Antarctica', icon: '🐧' }
+  { id: 'asia', zh: '亚洲', en: 'Asia' },
+  { id: 'europe', zh: '欧洲', en: 'Europe' },
+  { id: 'africa', zh: '非洲', en: 'Africa' },
+  { id: 'namerica', zh: '北美洲', en: 'North America' },
+  { id: 'samerica', zh: '南美洲', en: 'South America' },
+  { id: 'oceania', zh: '大洋洲', en: 'Oceania' },
+  { id: 'polar', zh: '南极洲', en: 'Antarctica' }
 ];
 const continentOf = (c) => {
   if (c.region === 'Asia') return 'asia';
@@ -220,25 +218,25 @@ function darkenLayer(l) {
   for (const k of KEYS) {
     const v = p[k];
     if (typeof v !== 'string' || !v || !v.startsWith('#')) continue;
-    if (k === 'text-color') p[k] = isLabel ? '#e6f0ff' : adjust(v, 0.9, 0.7);
-    else if (k === 'text-halo-color') p[k] = '#04060c';
-    else if (l.type === 'background') p[k] = '#04060c';
-    else if (isWater) p[k] = (id === 'water') ? '#06101f' : adjust(v, 0.35, 0.4);
-    else if (isRoad) p[k] = adjust(v, 0.3, 0.3);
-    else if (isBoundary) p[k] = '#3fa7e0';
-    else if (isBuilding) p[k] = '#131c2e';
-    else if (isLand) p[k] = adjust(v, 0.22, 0.35);
-    else if (isAero) p[k] = adjust(v, 0.3, 0.3);
+    if (k === 'text-color') p[k] = isLabel ? '#dde7f5' : adjust(v, 0.85, 0.65);
+    else if (k === 'text-halo-color') p[k] = '#010204';
+    else if (l.type === 'background') p[k] = '#010204';
+    else if (isWater) p[k] = (id === 'water') ? '#040910' : adjust(v, 0.22, 0.3);
+    else if (isRoad) p[k] = adjust(v, 0.16, 0.22);
+    else if (isBoundary) p[k] = '#4a5568';
+    else if (isBuilding) p[k] = '#0b111c';
+    else if (isLand) p[k] = adjust(v, 0.13, 0.3);
+    else if (isAero) p[k] = adjust(v, 0.18, 0.22);
     else if (isPoi) p[k] = '#dbe7f7';
-    else p[k] = adjust(v, 0.3, 0.5);
+    else p[k] = adjust(v, 0.22, 0.45);
   }
   if (isBoundary) {
     const lo = p['line-opacity'];
-    if (typeof lo === 'number') p['line-opacity'] = Math.min(0.9, lo);
-    else if (lo == null) p['line-opacity'] = 0.6;
-    if (typeof p['line-width'] === 'number') p['line-width'] = Math.max(0.7, p['line-width']);
+    if (typeof lo === 'number') p['line-opacity'] = Math.min(0.3, lo);
+    else if (lo == null) p['line-opacity'] = 0.22;
+    if (typeof p['line-width'] === 'number') p['line-width'] = Math.min(0.6, Math.max(0.35, p['line-width']));
   }
-  if (isWater && typeof p['fill-opacity'] === 'number') p['fill-opacity'] = p['fill-opacity'] * 0.9;
+  if (isWater && typeof p['fill-opacity'] === 'number') p['fill-opacity'] = p['fill-opacity'] * 0.85;
   return l;
 }
 
@@ -252,7 +250,7 @@ function firstFont(style) {
 
 function adaptStyle(base) {
   const s = JSON.parse(JSON.stringify(base));
-  s.layers = s.layers.filter((l) => l.id !== 'natural_earth'); // 去掉卫星晕渲，纯矢量深色
+  s.layers = s.layers.filter((l) => l.id !== 'natural_earth' && l.type !== 'background'); // 去掉卫星晕渲与背景层：纯矢量深色，球体外虚空露出星空
   delete s.sources['ne2_shaded'];
   s.layers = s.layers.map(darkenLayer);
 
@@ -274,27 +272,27 @@ function adaptStyle(base) {
     maxzoom: 15
   };
 
-  // —— 自定义图层 ——
+  // —— 自定义图层（经纬网淡化、轮廓线只保留瓦片自带的一条，避免重复） ——
   const graticule = {
     id: 'graticule', type: 'line', source: 'graticule',
     filter: ['==', ['geometry-type'], 'LineString'],
     paint: {
-      'line-color': '#1d3350', 'line-width': 0.5,
-      'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.3, 2, 0.2, 5, 0.08, 8, 0.02]
+      'line-color': '#131e31', 'line-width': 0.4,
+      'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.14, 2, 0.09, 5, 0.035, 8, 0.008]
     }
   };
   const graticuleMajor = {
     id: 'graticule-major', type: 'line', source: 'graticule',
     filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'major'], 1]],
-    paint: { 'line-color': '#2a4a73', 'line-width': 0.7, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.45, 2, 0.3, 6, 0.08] }
+    paint: { 'line-color': '#1b2e49', 'line-width': 0.5, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.18, 2, 0.12, 6, 0.03] }
   };
   const graticuleLabel = {
     id: 'graticule-label', type: 'symbol', source: 'graticule',
     filter: ['==', ['geometry-type'], 'Point'],
-    layout: { 'text-field': ['get', 't'], 'text-size': 9, 'text-allow-overlap': false, 'text-font': font },
+    layout: { 'text-field': ['get', 't'], 'text-size': 8.5, 'text-allow-overlap': false, 'text-font': font },
     paint: {
-      'text-color': '#3d5a7d', 'text-halo-color': '#04060c', 'text-halo-width': 1,
-      'text-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.7, 3, 0.4, 6, 0]
+      'text-color': '#2b3f5e', 'text-halo-color': '#010204', 'text-halo-width': 1,
+      'text-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.4, 3, 0.22, 6, 0]
     }
   };
   const countriesFill = {
@@ -302,46 +300,29 @@ function adaptStyle(base) {
     paint: {
       'fill-color': [
         'case',
-        ['boolean', ['feature-state', 'selected'], false], 'rgba(74,222,128,0.26)',
-        ['boolean', ['feature-state', 'hover'], false], 'rgba(96,165,250,0.16)',
+        ['boolean', ['feature-state', 'selected'], false], 'rgba(74,222,128,0.20)',
+        ['boolean', ['feature-state', 'hover'], false], 'rgba(96,165,250,0.12)',
         'rgba(0,0,0,0)'
       ],
       'fill-opacity': 1
-    }
-  };
-  // 国家边界发光（worldmonitor 风格：外圈柔光 + 内圈亮线）
-  const countriesGlow = {
-    id: 'countries-glow', type: 'line', source: 'countries',
-    paint: {
-      'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#4ade80', '#60a5fa'],
-      'line-width': ['interpolate', ['linear'], ['zoom'], 0, 2.4, 6, 4.5],
-      'line-opacity': 0.15, 'line-blur': 2.2
-    }
-  };
-  const countriesOutline = {
-    id: 'countries-outline', type: 'line', source: 'countries',
-    paint: {
-      'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#86efac', '#93c5fd'],
-      'line-width': ['interpolate', ['linear'], ['zoom'], 0, 0.8, 6, 1.3],
-      'line-opacity': 0.9
     }
   };
   // 城市发光点（外圈光晕 + 亮核），首都琥珀色
   const cityGlow = {
     id: 'city-glow', type: 'circle', source: 'cities',
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 5, 2, 8, 5, 12],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 4, 2, 6.5, 5, 10],
       'circle-color': ['case', ['==', ['get', 'cap'], 1], '#febc2e', '#60a5fa'],
-      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.14, 5, 0.22],
+      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.1, 5, 0.16],
       'circle-blur': 1
     }
   };
   const cityDots = {
     id: 'city-dots', type: 'circle', source: 'cities',
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 1.4, 2, 2.3, 5, 3.4],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0.5, 1.2, 2, 2, 5, 3],
       'circle-color': ['case', ['==', ['get', 'cap'], 1], '#fde68a', '#bfdbfe'],
-      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.95, 5, 1],
+      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 0.5, 0.9, 5, 0.98],
       'circle-stroke-color': ['case', ['==', ['get', 'cap'], 1], '#92400e', '#1d4ed8'],
       'circle-stroke-width': 0.6
     }
@@ -358,10 +339,10 @@ function adaptStyle(base) {
       'text-size': 10.5, 'text-anchor': 'top', 'text-offset': [0, 0.7],
       'text-allow-overlap': false, 'text-font': font
     },
-    paint: { 'text-color': '#dff0ff', 'text-halo-color': '#04060c', 'text-halo-width': 1.3 }
+    paint: { 'text-color': '#cfe0f5', 'text-halo-color': '#010204', 'text-halo-width': 1.2 }
   };
 
-  s.layers.push(graticule, graticuleMajor, graticuleLabel, countriesFill, countriesGlow, countriesOutline, cityGlow, cityDots, cityDotsHit, cityLabels);
+  s.layers.push(graticule, graticuleMajor, graticuleLabel, countriesFill, cityGlow, cityDots, cityDotsHit, cityLabels);
   return s;
 }
 
@@ -497,41 +478,9 @@ function bindMapEvents() {
   });
 }
 
-/* ---------------- 3D 夜景地球（Three.js NightEarth 模块，默认模式，懒加载） ---------------- */
-function initGlobe() {
-  if (state.globe) return;
-  if (typeof NightEarth === 'undefined') {
-    toast('3D 引擎加载失败');
-    return;
-  }
-  const bj = state.cities.find((c) => c.n.toLowerCase() === 'beijing');
-  state.globe = new NightEarth($('map'), {
-    data: { borders: state.geo, cities: state.cities, countries: state.countries },
-    utcEl: $('utcClock'),
-    onCityClick: (city) => selectCity(city),
-    onCountryClick: (props) => {
-      const iso2 = props && props.iso2;
-      const c = iso2 ? state.countryByIso2.get(iso2) : null;
-      if (c) selectCountry(c);
-      else if (props && props.name) selectPlace({ nameZh: props.zh || props.name, name: props.name, coords: null });
-    },
-    onMarkerClick: () => { if (bj) selectCity(bj); }
-  });
-  $('utcClock').style.display = 'block';
-}
+/* ---------------- 3D 夜景地球（Three.js NightEarth 模块）已退役：统一使用 MapLibre 矢量地球仪 ---------------- */
 
-// 矢量地图懒加载（MapLibre 约 1MB，首次切到矢量时才动态加载，加速首屏）
-let mapLoading = null;
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('脚本加载失败: ' + src));
-    document.head.appendChild(s);
-  });
-}
-// 地图标签语言：中文=地名用 name:zh；英文=保持英文（仅矢量地图使用，夜景无此需求）
+// 地图标签语言：中文=地名用 name:zh；英文=保持英文
 function applyLabelLang() {
   if (!state.map || !state.map.isStyleLoaded()) return;
   const zh = state.lang === 'zh';
@@ -550,11 +499,11 @@ function applyLabelLang() {
   } catch (e) { /* ignore */ }
 }
 
-// 飞到某地（夜景球）
+// 飞到某地（矢量地球仪）
 function flyTo(coords, zoom) {
-  if (!state.globe || !coords) return;
-  const dist = Math.max(1.15, Math.min(2.8, 3.2 - (zoom || 3) * 0.22));
-  state.globe.flyTo(coords[0], coords[1], dist);
+  if (!state.map || !coords) return;
+  const z = Math.max(1.2, Math.min(8, zoom || 3));
+  state.map.flyTo({ center: coords, zoom: z, duration: 1800, essential: true });
 }
 
 function clearCountrySelected() {
@@ -633,7 +582,7 @@ async function loadNews(sel) {
     if (data && data.items.length) {
       renderNews({ ...data, fallback: 'static', fetchedAt: data.fetchedAt || '' });
     } else {
-      renderSheetStatus('📭', '该地点暂无新闻', '云端快照中没有匹配内容，可切换新闻语言或换一个地点试试');
+      renderSheetStatus('', '该地点暂无新闻', '云端快照中没有匹配内容，可切换新闻语言或换一个地点试试');
     }
     return;
   }
@@ -653,8 +602,8 @@ async function loadNews(sel) {
     const snap = await staticP;
     if (snap && snap.items.length) { renderNews({ ...snap, fallback: 'static' }); return; }
     const msg = (e.name === 'AbortError') ? '实时新闻源响应慢，且暂无离线数据' : (e.message || '加载失败');
-    const box = renderSheetStatus('😢', msg, '点击下方按钮重试');
-    const retry = el('button', 'chip', '↻ 重试');
+    const box = renderSheetStatus('', msg, '点击下方按钮重试');
+    const retry = el('button', 'chip', '重试');
     retry.style.marginTop = '4px';
     retry.addEventListener('click', () => loadNews(state.selected || sel));
     box.appendChild(retry);
@@ -774,19 +723,19 @@ function relTime(iso) {
 
 /* ---- A-Y 板块元信息（标签/标题，供前端展示） ---- */
 const SECTORS_META = [
-  { key: 'A', title: '时政/官方/政策/法规', icon: '🏛️' }, { key: 'B', title: '外交/国际关系/地缘政治/地区冲突', icon: '🌍' },
-  { key: 'C', title: '军事/国防/战争/军工', icon: '🪖' }, { key: 'D', title: '财经/金融/市场/股市/公司/IPO/央行/外汇', icon: '📈' },
-  { key: 'E', title: '宏观经济/经济数据/经济政策', icon: '📊' }, { key: 'F', title: '科技/AI/半导体/互联网', icon: '🤖' },
-  { key: 'G', title: '能源/石油/天然气/新能源', icon: '🛢️' }, { key: 'H', title: '贵金属/稀土/有色/大宗商品', icon: '🥇' },
-  { key: 'I', title: '医药/生物科技/医疗健康', icon: '💊' }, { key: 'J', title: '人物/观点/深度评论', icon: '✍️' },
-  { key: 'K', title: '国际综合/突发/快讯', icon: '🌐' }, { key: 'L', title: '中东/区域专报', icon: '🕌' },
-  { key: 'M', title: '气候/环境/可持续发展', icon: '🌱' }, { key: 'N', title: '航天/航空/交通物流', icon: '🚀' },
-  { key: 'O', title: '汽车/新能源车/出行', icon: '🚗' }, { key: 'P', title: '房地产/基建/城市化', icon: '🏗️' },
-  { key: 'Q', title: '农业/食品/农产品', icon: '🌾' }, { key: 'R', title: '加密货币/数字资产/区块链', icon: '🪙' },
-  { key: 'S', title: '法律/监管/合规/制裁', icon: '⚖️' }, { key: 'T', title: '社会/文化/教育/体育/娱乐', icon: '🎭' },
-  { key: 'U', title: '数据/报告/智库研究', icon: '📑' }, { key: 'V', title: '港澳台/区域新闻', icon: '🏙️' },
-  { key: 'W', title: '网络安全/隐私/数字治理', icon: '🛡️' }, { key: 'X', title: '公共卫生/灾害/应急', icon: '🚑' },
-  { key: 'Y', title: '移民/难民/人道主义', icon: '🕊️' }
+  { key: 'A', title: '时政/官方/政策/法规' }, { key: 'B', title: '外交/国际关系/地缘政治/地区冲突' },
+  { key: 'C', title: '军事/国防/战争/军工' }, { key: 'D', title: '财经/金融/市场/股市/公司/IPO/央行/外汇' },
+  { key: 'E', title: '宏观经济/经济数据/经济政策' }, { key: 'F', title: '科技/AI/半导体/互联网' },
+  { key: 'G', title: '能源/石油/天然气/新能源' }, { key: 'H', title: '贵金属/稀土/有色/大宗商品' },
+  { key: 'I', title: '医药/生物科技/医疗健康' }, { key: 'J', title: '人物/观点/深度评论' },
+  { key: 'K', title: '国际综合/突发/快讯' }, { key: 'L', title: '中东/区域专报' },
+  { key: 'M', title: '气候/环境/可持续发展' }, { key: 'N', title: '航天/航空/交通物流' },
+  { key: 'O', title: '汽车/新能源车/出行' }, { key: 'P', title: '房地产/基建/城市化' },
+  { key: 'Q', title: '农业/食品/农产品' }, { key: 'R', title: '加密货币/数字资产/区块链' },
+  { key: 'S', title: '法律/监管/合规/制裁' }, { key: 'T', title: '社会/文化/教育/体育/娱乐' },
+  { key: 'U', title: '数据/报告/智库研究' }, { key: 'V', title: '港澳台/区域新闻' },
+  { key: 'W', title: '网络安全/隐私/数字治理' }, { key: 'X', title: '公共卫生/灾害/应急' },
+  { key: 'Y', title: '移民/难民/人道主义' }
 ];
 const CAT_COLORS = ['#38bdf8', '#fbbf24', '#f472b6', '#34d399', '#a78bfa', '#f87171', '#60a5fa', '#facc15', '#4ade80', '#fb923c'];
 const catColor = (key) => CAT_COLORS[((key.charCodeAt(0) - 65) % CAT_COLORS.length + CAT_COLORS.length) % CAT_COLORS.length];
@@ -801,17 +750,17 @@ function renderNews(data) {
   badge.classList.toggle('warn', data.window !== '1d' && data.items.length > 0);
 
   if (data.window !== '1d' && data.items.length > 0 && data.fallback !== 'snapshot') {
-    body.appendChild(el('div', 'sheet-hint', `⏱️ 当日相关新闻较少，已自动扩大范围为「${data.label}」`));
+    body.appendChild(el('div', 'sheet-hint', `当日相关新闻较少，已自动扩大范围为「${data.label}」`));
   }
   if (data.fallback === 'snapshot') {
-    body.appendChild(el('div', 'sheet-hint', `📦 联网新闻源暂不可用，已展示离线快照备用数据（${data.label}）`));
+    body.appendChild(el('div', 'sheet-hint', `联网新闻源暂不可用，已展示离线快照备用数据（${data.label}）`));
   }
   if (data.fallback === 'static') {
-    body.appendChild(el('div', 'sheet-hint', '☁️ 数据来自云端定时更新的新闻快照，每天自动刷新'));
+    body.appendChild(el('div', 'sheet-hint', '数据来自云端定时更新的新闻快照，每天自动刷新'));
   }
   if (!data.items.length) {
     body.appendChild(el('div', 'status',
-      `<div class="s-icon">📭</div><div class="s-msg">该地点近期暂无相关新闻</div>` +
+      `<div class="s-msg">该地点近期暂无相关新闻</div>` +
       `<div class="s-sub">可切换新闻语言（中文 / English）或点击邻近城市试试</div>`));
     return;
   }
@@ -832,7 +781,7 @@ function renderNews(data) {
     ? data.items.filter((it) => (it.cat || []).includes(state.newsCat))
     : data.items;
   if (!items.length) {
-    body.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该板块暂无内容</div>'));
+    body.appendChild(el('div', 'status', '<div class="s-msg">该板块暂无内容</div>'));
     return;
   }
   const today = new Date().toDateString();
@@ -846,7 +795,7 @@ function renderNews(data) {
         ${it.source ? `<span class="a-src">${esc(it.source)}</span>` : ''}
         ${isNew ? '<span class="a-new">今日</span>' : ''}
         <span>${relTime(it.published)}</span>
-        <span class="a-open">↗ 原文</span>
+        <span class="a-open">原文</span>
       </div>`);
     a.href = it.link;
     a.target = '_blank';
@@ -871,7 +820,8 @@ function renderSheetStatus(iconHtml, msg, sub) {
   const body = $('sheetBody');
   body.innerHTML = '';
   const box = el('div', 'status',
-    `<div class="s-icon">${iconHtml}</div><div class="s-msg">${esc(msg)}</div>` +
+    (iconHtml ? `<div class="s-icon">${iconHtml}</div>` : '') +
+    `<div class="s-msg">${esc(msg)}</div>` +
     (sub ? `<div class="s-sub">${esc(sub)}</div>` : ''));
   body.appendChild(box);
   return box;
@@ -925,10 +875,10 @@ function renderList(filterText) {
     const res = doSearch(q);
     const frag = document.createDocumentFragment();
     if (!res.countries.length && !res.cities.length) {
-      frag.appendChild(el('div', 'status', '<div class="s-icon">🔎</div><div class="s-msg">未找到匹配的国家或城市</div>'));
+      frag.appendChild(el('div', 'status', '<div class="s-msg">未找到匹配的国家或城市</div>'));
     }
     if (res.countries.length) {
-      frag.appendChild(el('div', 'sr-head', '🏳️ 国家 / 地区'));
+      frag.appendChild(el('div', 'sr-head', '国家 / 地区'));
       for (const c of res.countries) frag.appendChild(countryRow(c, true));
     }
     if (res.cities.length) {
@@ -936,8 +886,7 @@ function renderList(filterText) {
       for (const c of res.cities) {
         const row = el('div', 'country-row');
         const co = state.countryByIso2.get(c.c);
-        row.innerHTML = `<span class="flag">${co ? co.emoji : '📍'}</span>
-          <span class="cname">${esc(c.z || c.n)}<i>${esc(c.n)} · ${co ? esc(zhName(co)) : ''}</i></span>
+        row.innerHTML = `<span class="cname">${esc(c.z || c.n)}<i>${esc(c.n)} · ${co ? esc(zhName(co)) : ''}</i></span>
           <span class="news-btn">新闻</span>`;
         row.addEventListener('click', () => selectCity(c));
         frag.appendChild(row);
@@ -950,7 +899,7 @@ function renderList(filterText) {
   const groups = groupCountries();
   for (const g of groups) {
     const group = el('div', 'lv-group');
-    const head = el('div', 'lv-group-head', `${g.icon} ${state.lang === 'zh' ? g.zh : g.en} <span class="cnt">${g.countries.length} 个</span> <span class="chev">▾</span>`);
+    const head = el('div', 'lv-group-head', `${state.lang === 'zh' ? g.zh : g.en} <span class="cnt">${g.countries.length} 个</span> <span class="chev">▾</span>`);
     const body = el('div', 'lv-group-body');
     for (const c of g.countries) {
       body.appendChild(countryRow(c, false));
@@ -965,8 +914,7 @@ function renderList(filterText) {
 function countryRow(c, expanded) {
   const wrap = el('div', '');
   const row = el('div', 'country-row');
-  row.innerHTML = `<span class="flag">${c.emoji || '🏳️'}</span>
-    <span class="cname">${esc(zhName(c))}<i>${esc(c.name)}${c.capital ? ' · 首都 ' + esc(c.capital) : ''}</i></span>
+  row.innerHTML = `<span class="cname">${esc(zhName(c))}<i>${esc(c.name)}${c.capital ? ' · 首都 ' + esc(c.capital) : ''}</i></span>
     <button class="news-btn">新闻</button>
     <span class="chev">▸</span>`;
   const citiesBox = el('div', 'country-cities');
@@ -1027,10 +975,10 @@ async function renderSectors() {
   const list = $('sectorList');
   tabs.innerHTML = '';
   list.innerHTML = '';
-  renderSectorStatus(list, '⏳', '正在汇总板块新闻…', '');
+  renderSectorStatus(list, '正在汇总板块新闻…', '');
   const data = await getSectorData();
   if (!data || !data.sectors) {
-    renderSectorStatus(list, '📭', '暂无板块数据', '静态新闻数据未生成（请运行云端抓取，或访问公网版）');
+    renderSectorStatus(list, '暂无板块数据', '静态新闻数据未生成（请运行云端抓取，或访问公网版）');
     return;
   }
   const buckets = data.sectors;
@@ -1048,10 +996,10 @@ async function renderSectors() {
   renderSectorsList(buckets);
 }
 
-function renderSectorStatus(list, icon, msg, sub) {
+function renderSectorStatus(list, msg, sub) {
   list.innerHTML = '';
   list.appendChild(el('div', 'status',
-    `<div class="s-icon">${icon}</div><div class="s-msg">${esc(msg)}</div>` +
+    `<div class="s-msg">${esc(msg)}</div>` +
     (sub ? `<div class="s-sub">${esc(sub)}</div>` : '')));
 }
 
@@ -1065,7 +1013,7 @@ function renderSectorsList(buckets) {
     if (s) list.appendChild(el('div', 'sector-head', `板块 ${s.key} · ${s.title}`));
   }
   if (!items.length) {
-    list.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该板块暂无新闻</div>'));
+    list.appendChild(el('div', 'status', '<div class="s-msg">该板块暂无新闻</div>'));
     return;
   }
   const today = new Date().toDateString();
@@ -1106,10 +1054,10 @@ async function renderSources() {
   const list = $('srcList');
   regionEl.innerHTML = '';
   tabs.innerHTML = '';
-  renderSectorStatus(list, '⏳', '正在加载来源新闻…', '');
+  renderSectorStatus(list, '正在加载来源新闻…', '');
   const data = await getSourceData();
   if (!data || !data.sources || !data.sources.length) {
-    renderSectorStatus(list, '📭', '暂无来源数据', '云端暂未抓取来源，请稍后再试');
+    renderSectorStatus(list, '暂无来源数据', '云端暂未抓取来源，请稍后再试');
     return;
   }
   // 国内 / 国外 切换
@@ -1139,7 +1087,7 @@ function renderSourcesList(data) {
     .filter((s) => s.region === state.srcRegion)
     .filter((s) => !state.srcGroup || s.group === state.srcGroup);
   if (!srcs.length) {
-    list.appendChild(el('div', 'status', '<div class="s-icon">🗂️</div><div class="s-msg">该分类暂无来源</div>'));
+    list.appendChild(el('div', 'status', '<div class="s-msg">该分类暂无来源</div>'));
     return;
   }
   for (const src of srcs) {
@@ -1151,7 +1099,6 @@ function renderSourcesList(data) {
         <div class="a-tz"></div>
         <div class="a-meta">
           <span>${relTime(it.published)}</span>
-          <span class="a-open">↗</span>
         </div>`);
       a.href = it.link;
       a.target = '_blank';
@@ -1191,10 +1138,9 @@ function renderSearchDropdown(text) {
     box.appendChild(el('div', 'sr-item', '<span class="sr-sub">未找到匹配项</span>'));
   }
   if (res.countries.length) {
-    box.appendChild(el('div', 'sr-head', '🏳️ 国家 / 地区'));
+    box.appendChild(el('div', 'sr-head', '国家 / 地区'));
     for (const c of res.countries) {
-      const item = el('div', 'sr-item', `<span class="sr-flag">${c.emoji || '🏳️'}</span>
-        <span class="sr-name">${esc(zhName(c))}</span><span class="sr-sub">${esc(c.name)}</span>`);
+      const item = el('div', 'sr-item', `<span class="sr-name">${esc(zhName(c))}</span><span class="sr-sub">${esc(c.name)}</span>`);
       item.addEventListener('click', () => { box.classList.add('hidden'); selectCountry(c); });
       box.appendChild(item);
     }
@@ -1203,8 +1149,7 @@ function renderSearchDropdown(text) {
     box.appendChild(el('div', 'sr-head', '城市'));
     for (const c of res.cities) {
       const co = state.countryByIso2.get(c.c);
-      const item = el('div', 'sr-item', `<span class="sr-flag">${co ? co.emoji : '📍'}</span>
-        <span class="sr-name">${esc(c.z || c.n)}</span><span class="sr-sub">${esc(c.n)}</span>`);
+      const item = el('div', 'sr-item', `<span class="sr-name">${esc(c.z || c.n)}</span><span class="sr-sub">${esc(c.n)}</span>`);
       item.addEventListener('click', () => { box.classList.add('hidden'); selectCity(c); });
       box.appendChild(item);
     }
@@ -1241,7 +1186,7 @@ function setView(v) {
   if (v === 'sectors') renderSectors();
   if (v === 'sources') renderSources();
   if (v === 'globe') {
-    setTimeout(() => { if (state.map) state.map.resize(); if (state.globe) state.globe.resize(); }, 60);
+    setTimeout(() => { if (state.map) state.map.resize(); }, 60);
   }
 }
 
@@ -1278,7 +1223,10 @@ function bindUI() {
   });
 
   $('homeBtn').addEventListener('click', () => {
-    if (state.globe) state.globe.reset();
+    if (state.map) state.map.flyTo({ center: [18, 24], zoom: 1.05, duration: 1800, essential: true });
+  });
+  $('projBtn').addEventListener('click', () => {
+    setProjection(state.projection === 'globe' ? 'mercator' : 'globe');
   });
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
@@ -1313,7 +1261,8 @@ function registerSW() {
   try {
     await loadData();               // 国家+城市+多边形（并行小文件，约 1s）
     renderList('');
-    initGlobe();                    // 球体秒现（兜底材质），夜景灯光加载后渐入
+    await loadVectorAssets();       // 矢量样式 + 瓦片地址（本地 data/style-liberty.json）
+    initMap();                      // 矢量地球仪（默认 3D 球体）
     // 后台预取板块/来源数据，点开即用
     getSectorData();
     getSourceData();
@@ -1322,7 +1271,7 @@ function registerSW() {
     toast('数据加载失败，请确认已运行 node scripts/setup-data.mjs');
   }
   // 调试/测试钩子
-  window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map, getGlobe: () => state.globe };
+  window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map, getProjection: () => (state.map ? state.map.getProjection() : null) };
   if (state.mode === 'static') getStaticIndex(); // 静态模式：后台预取小索引，点新闻即秒开
   registerSW();
 })();
