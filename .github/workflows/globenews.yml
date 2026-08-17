@@ -30,9 +30,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Fetch hot news (cloud, ~10-20 min)
+      - name: Fetch hot news (cloud, ~30-60 min)
         run: node scripts/fetch-hot-news.mjs
-        timeout-minutes: 45
+        timeout-minutes: 120
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
