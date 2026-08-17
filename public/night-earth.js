@@ -60,7 +60,7 @@
         markerLabel: '',
         radius: 1,
         maxDist: 6,
-        minDist: 1.3,
+        minDist: 1.6,
         zoomSwitchDist: 1.55,          // 缩放到该距离时自动切矢量地图（看街道路名）
         lightIntensity: 1.0,           // 夜景灯光亮度（改这里调节）
         onZoomIn: null,
@@ -97,12 +97,14 @@
       this.controls.update();
 
       // 载入贴图
-      const [day, night] = await Promise.all([
-        this.loadTex(this.opts.dayTex),
-        this.loadTex(this.opts.nightTex)
-      ]);
-      if (!day || !night) return;
-      this.buildGlobe(day, night);
+      // 先画球体（兜底材质，秒现），夜景灯光贴图加载完成后渐入
+      this.buildGlobe(this.fallbackTex('rgba(10,18,32,1)'), this.fallbackTex('rgba(0,0,0,1)'));
+      this.loadTex(this.opts.dayTex).then((t) => {
+        if (t && this.globe) { this.globe.material.map = t; this.globe.material.needsUpdate = true; }
+      });
+      this.loadTex(this.opts.nightTex).then((t) => {
+        if (t && this.globe) { this.globe.material.emissiveMap = t; this.globe.material.needsUpdate = true; }
+      });
 
       // 数据：外部传入或自行拉取
       if (this.opts.data) {
@@ -131,46 +133,29 @@
       });
     }
 
+    // 兜底贴图（纯色），保证球体始终不透明
+    fallbackTex(color) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    // 标准材质：无自定义着色器（避免部分设备着色器编译失败导致球体透明），
+    // 白天贴图压暗作底，夜景贴图作自发光（城市灯光），球体必然不透明、正常遮挡背面
     buildGlobe(dayTex, nightTex) {
       const geo = new THREE.SphereGeometry(this.opts.radius, 96, 64);
-      const uniforms = {
-        uDay: { value: dayTex },
-        uNight: { value: nightTex },
-        uNightScale: { value: this.opts.lightIntensity }
-      };
-      const mat = new THREE.ShaderMaterial({
-        uniforms,
-        vertexShader: `
-          varying vec2 vUv;
-          varying vec3 vNormal;
-          void main() {
-            vUv = uv;
-            vNormal = normalize(mat3(modelMatrix) * normal);
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }`,
-        // 暗黑夜景：无太阳光照面，陆地极暗隐约可见，城市灯光自发光，极地暗蓝冰盖
-        fragmentShader: `
-          uniform sampler2D uDay;
-          uniform sampler2D uNight;
-          uniform float uNightScale;
-          varying vec2 vUv;
-          varying vec3 vNormal;
-          void main() {
-            vec3 day = texture2D(uDay, vUv).rgb;
-            vec3 night = texture2D(uNight, vUv).rgb;
-            vec3 land = day * 0.07;                 // 陆地压到 7%，隐约可辨
-            vec3 lights = night * uNightScale;      // 夜景灯光自发光
-            vec3 col = max(land, lights);
-            col = max(col, vec3(0.004));            // 最低亮度，避免纯黑死黑
-            // 低饱和度冷峻
-            col = mix(vec3(dot(col, vec3(0.333))), col, 0.5);
-            // 南北极暗蓝冰盖（更弱、贴合暗黑风）
-            float lat = asin(clamp(vNormal.y, -1.0, 1.0));
-            float pole = smoothstep(0.88, 0.985, abs(lat));
-            vec3 ice = vec3(0.32, 0.40, 0.54);
-            col = mix(col, ice, pole * 0.6);
-            gl_FragColor = vec4(col, 1.0);
-          }`
+      const mat = new THREE.MeshPhongMaterial({
+        map: dayTex,                       // 白天贴图，乘以深色 color 后极暗
+        emissiveMap: nightTex,             // 夜景灯光自发光
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: this.opts.lightIntensity * 1.5,
+        color: new THREE.Color(0x0d1524),  // 深蓝灰 → 海洋/陆地都压暗
+        specular: new THREE.Color(0x000000),
+        shininess: 0,
+        transparent: false                 // 绝对不透明
       });
       this.globe = new THREE.Mesh(geo, mat);
       this.scene.add(this.globe);
@@ -252,7 +237,7 @@
         const label = c.native || c.name;
         if (!label) continue;
         const tex = this.makeTextTexture(label);
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0.92 });
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: true, opacity: 0.95 }); // 深度测试：背面的标签被球体遮挡
         const spr = new THREE.Sprite(mat);
         const v = latLonToVec3(c.lng, c.lat, r);
         spr.position.copy(v);
@@ -385,13 +370,13 @@
         requestAnimationFrame(loop);
         this.controls.update();
         const dist = this.camera.position.length();
-        // 渐进显示：远景=主要城市圆点；中景=全部城市+国家名（本国语言）；近景=交给矢量地图（街道）
+        // 渐进层次：远景=主要城市圆点+轮廓；中景=全部城市圆点+国家名（本国语言）；近景=清爽（交给矢量地图）
         if (this.cityPointsFar) this.cityPointsFar.visible = true;
-        if (this.cityPointsAll) this.cityPointsAll.visible = dist < 2.6;
+        if (this.cityPointsAll) this.cityPointsAll.visible = dist > 2.2 && dist < 3.6;
         if (this.countryLabelGroup) {
-          this.countryLabelGroup.visible = dist >= 1.55 && dist < 3.6;
+          this.countryLabelGroup.visible = dist > 2.1 && dist < 3.1;
           if (this.countryLabelGroup.visible) {
-            const s = THREE.MathUtils.clamp(0.65 + (3.6 - dist) * 0.4, 0.6, 1.6);
+            const s = THREE.MathUtils.clamp(0.7 + (3.1 - dist) * 0.7, 0.7, 1.5);
             this.countryLabelGroup.scale.setScalar(s);
           }
         }

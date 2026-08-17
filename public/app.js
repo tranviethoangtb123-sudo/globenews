@@ -82,27 +82,13 @@ async function detectMode() {
 }
 
 async function loadData() {
-  const tilejsonP = fetch('api/tilejson')
-    .then((r) => r.json())
-    .catch(async () => {
-      try { // 静态模式：读云端抓取时固化的瓦片地址
-        const rt = await (await fetch('data/runtime.json')).json();
-        if (rt && Array.isArray(rt.tiles) && rt.tiles.length) return { tiles: rt.tiles };
-      } catch (e) { /* 无 */ }
-      return { tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'] };
-    });
-  const [countries, geo, cities, styleBase, tilejson] = await Promise.all([
+  // 第 1 层：国家 + 城市（小文件，秒到）→ 列表/搜索立即可用
+  const [countries, cities] = await Promise.all([
     fetch('data/countries.json').then((r) => r.json()),
-    fetch('data/countries.geo.json').then((r) => r.json()),
-    fetch('data/cities.json').then((r) => r.json()),
-    fetch('data/style-liberty.json').then((r) => r.json()),
-    tilejsonP
+    fetch('data/cities.json').then((r) => r.json())
   ]);
   state.countries = countries;
-  state.geo = geo;
   state.cities = cities;
-  state.styleBase = styleBase;
-  state.tileTiles = (tilejson && tilejson.tiles && tilejson.tiles.length) ? tilejson.tiles : ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'];
   for (const c of countries) state.countryByIso2.set(c.iso2, c);
   state.citiesGeo = {
     type: 'FeatureCollection',
@@ -112,6 +98,28 @@ async function loadData() {
       geometry: { type: 'Point', coordinates: [c.lng, c.lat] }
     }))
   };
+  // 第 2 层：国家多边形（球体轮廓）
+  state.geo = await fetch('data/countries.geo.json').then((r) => r.json());
+}
+
+// 矢量地图样式数据（仅切到矢量时才加载）
+async function loadVectorAssets() {
+  if (state.styleBase) return;
+  const tilejsonP = fetch('api/tilejson')
+    .then((r) => r.json())
+    .catch(async () => {
+      try { // 静态模式：读云端抓取时固化的瓦片地址
+        const rt = await (await fetch('data/runtime.json')).json();
+        if (rt && Array.isArray(rt.tiles) && rt.tiles.length) return { tiles: rt.tiles };
+      } catch (e) { /* 无 */ }
+      return { tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'] };
+    });
+  const [styleBase, tilejson] = await Promise.all([
+    fetch('data/style-liberty.json').then((r) => r.json()),
+    tilejsonP
+  ]);
+  state.styleBase = styleBase;
+  state.tileTiles = (tilejson && tilejson.tiles && tilejson.tiles.length) ? tilejson.tiles : ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'];
 }
 
 /* ---------------- 经纬网 ---------------- */
@@ -531,6 +539,7 @@ function ensureMap() {
   if (state.map) return Promise.resolve();
   if (mapLoading) return mapLoading;
   mapLoading = (async () => {
+    await loadVectorAssets();
     if (typeof maplibregl === 'undefined') {
       await loadScript('vendor/maplibre-gl.js');
     }
@@ -979,6 +988,10 @@ function citiesFor(c) {
 function renderList(filterText) {
   const root = $('listView');
   root.innerHTML = '';
+  if (!state.countries.length) { // 数据未就绪
+    root.appendChild(el('div', 'status', '<div class="spinner"></div><div class="s-msg">正在加载国家列表…</div>'));
+    return;
+  }
   const q = (filterText || '').trim().toLowerCase();
 
   if (q) {
@@ -1376,10 +1389,13 @@ function registerSW() {
   state.mode = await detectMode();
   console.log('[mode]', state.mode);
   try {
-    await loadData();
+    await loadData();               // 国家+城市+多边形（并行小文件，约 1s）
     renderList('');
-    initGlobe(); // 默认夜景地球（轮廓/圆点/渐进缩放 → 街道级自动切矢量）
+    initGlobe();                    // 球体秒现（兜底材质），夜景灯光加载后渐入
     showMode('night');
+    // 后台预取板块/来源数据，点开即用
+    getSectorData();
+    getSourceData();
   } catch (e) {
     console.error(e);
     toast('数据加载失败，请确认已运行 node scripts/setup-data.mjs');
