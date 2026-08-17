@@ -25,7 +25,7 @@ const state = {
   geo: null,
   styleBase: null,
   tileTiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'],
-  map: null,
+  globe: null,
   projection: 'globe',
   selected: null,
   selectedGeoId: null,
@@ -488,22 +488,38 @@ function bindMapEvents() {
   });
 }
 
-function flyTo(coords, zoom) {
-  if (!state.map || !coords) return;
-  state.map.flyTo({ center: coords, zoom, duration: 1800, essential: true });
+/* ---------------- 3D 夜景地球（Three.js NightEarth 模块） ---------------- */
+function initGlobe() {
+  if (typeof NightEarth === 'undefined') {
+    toast('3D 引擎加载失败，已切换到列表模式');
+    setView('list');
+    return;
+  }
+  const bj = state.cities.find((c) => c.n.toLowerCase() === 'beijing');
+  state.globe = new NightEarth($('map'), {
+    data: { borders: state.geo, cities: state.cities },
+    utcEl: $('utcClock'),
+    onCityClick: (city) => selectCity(city),
+    onCountryClick: (props) => {
+      const iso2 = props && props.iso2;
+      const c = iso2 ? state.countryByIso2.get(iso2) : null;
+      if (c) selectCountry(c);
+      else if (props && props.name) selectPlace({ nameZh: props.zh || props.name, name: props.name, coords: null });
+    },
+    onMarkerClick: () => { if (bj) selectCity(bj); }
+  });
 }
 
-function clearCountrySelected() {
-  if (state.map && state.selectedGeoId != null) {
-    try { state.map.setFeatureState({ source: 'countries', id: state.selectedGeoId }, { selected: false }); } catch (e) { /* ignore */ }
-  }
-  state.selectedGeoId = null;
+function flyTo(coords, dist) {
+  if (!state.globe || !coords) return;
+  state.globe.flyTo(coords[0], coords[1], dist || 2.6);
 }
+
+function clearCountrySelected() { /* 夜景地球无国家高亮状态 */ }
 
 function zoomForCountry(c) {
   const a = c.area || 1e6;
-  const z = Math.round(9 - Math.log10(a + 1) * 1.1);
-  return Math.max(2.8, Math.min(7.5, z));
+  return Math.max(2.4, Math.min(4.4, 4.6 - Math.log10(a + 1) * 0.35));
 }
 
 /* ---------------- 选中与新闻 ---------------- */
@@ -514,14 +530,7 @@ function selectCountry(c, opts = {}) {
     q: queryName(c),
     coords: (c.lat != null && c.lng != null) ? [c.lng, c.lat] : null
   };
-  if (state.map) {
-    const feat = state.geo.features.find((f) => f.properties.iso2 === c.iso2);
-    if (feat && feat.id != null) {
-      state.selectedGeoId = feat.id;
-      try { state.map.setFeatureState({ source: 'countries', id: feat.id }, { selected: true }); } catch (e) { /* ignore */ }
-    }
-    if (opts.fly !== false && state.selected.coords) flyTo(state.selected.coords, zoomForCountry(c));
-  }
+  if (state.globe && opts.fly !== false && state.selected.coords) flyTo(state.selected.coords, zoomForCountry(c));
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
   if (state.view === 'list') highlightListCountry(c.iso2);
@@ -535,7 +544,7 @@ function selectCity(c) {
     q: (state.lang === 'zh' && rec.z) ? rec.z : rec.n,
     coords: [rec.lng, rec.lat]
   };
-  if (state.map) flyTo(state.selected.coords, 6.5);
+  if (state.globe) flyTo(state.selected.coords, 1.7);
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
 }
@@ -547,7 +556,7 @@ function selectPlace(pl) {
     q: (state.lang === 'zh' && pl.nameZh) ? pl.nameZh : pl.name,
     coords: pl.coords || null
   };
-  if (state.map && pl.coords) flyTo(pl.coords, 7);
+  if (state.globe && pl.coords) flyTo(pl.coords, 1.9);
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
 }
@@ -688,17 +697,20 @@ function translateText(text) {
   transQueue = p.catch(() => {});
   return p;
 }
-// 非中文标题一律附中文翻译（含英文/日文假名/韩文/阿拉伯文等）
+// 非中文标题一律附中文翻译：优先用云端预翻译的 it.tz，否则客户端按需翻译
 const needsZh = (s) => {
   const t = s || '';
   if (!/[a-zA-Z]{2}/.test(t) && !/[\u3040-\u30ff\uac00-\ud7af\u0600-\u06ff\u0400-\u04ff]/.test(t)) return false;
   return !/[\u4e00-\u9fff]/.test(t) || /[\u3040-\u30ff\uac00-\ud7af]/.test(t);
 };
-function attachTranslation(a, text) {
-  if (!needsZh(text)) return;
+function fillTranslation(a, it) {
   const slot = a.querySelector('.a-tz');
   if (!slot) return;
-  translateText(text).then((zh) => { if (zh && slot && slot.parentNode) slot.textContent = zh; });
+  if (it && it.tz) { slot.textContent = it.tz; return; }
+  const text = it ? it.title : '';
+  if (needsZh(text)) {
+    translateText(text).then((zh) => { if (zh && slot && slot.parentNode) slot.textContent = zh; });
+  }
 }
 
 function relTime(iso) {
@@ -791,7 +803,7 @@ function renderNews(data) {
     a.target = '_blank';
     a.rel = 'noopener';
     body.appendChild(a);
-    attachTranslation(a, it.title);
+    fillTranslation(a, it);
   }
 }
 
@@ -1020,7 +1032,7 @@ function renderSectorsList(buckets) {
     a.target = '_blank';
     a.rel = 'noopener';
     list.appendChild(a);
-    attachTranslation(a, it.t);
+    fillTranslation(a, it);
   }
 }
 
@@ -1092,7 +1104,7 @@ function renderSourcesList(data) {
       a.target = '_blank';
       a.rel = 'noopener';
       card.appendChild(a);
-      attachTranslation(a, it.title);
+      fillTranslation(a, it);
     }
     list.appendChild(card);
   }
@@ -1188,8 +1200,8 @@ function setView(v) {
   if (v === 'list') renderList($('searchInput').value);
   if (v === 'sectors') renderSectors();
   if (v === 'sources') renderSources();
-  if (v === 'globe' && state.map) {
-    setTimeout(() => state.map.resize(), 60);
+  if (v === 'globe' && state.globe) {
+    setTimeout(() => state.globe.resize(), 60);
   }
 }
 
@@ -1226,9 +1238,8 @@ function bindUI() {
   });
 
   $('homeBtn').addEventListener('click', () => {
-    if (state.map) state.map.flyTo({ center: [18, 24], zoom: 1.05, duration: 1200, essential: true });
+    if (state.globe) state.globe.reset();
   });
-  $('projBtn').addEventListener('click', () => setProjection(state.projection === 'globe' ? 'mercator' : 'globe'));
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
 }
@@ -1263,24 +1274,13 @@ function registerSW() {
     await loadData();
     renderHotChips();
     renderList('');
+    initGlobe();
   } catch (e) {
     console.error(e);
     toast('数据加载失败，请确认已运行 node scripts/setup-data.mjs');
   }
-  if (typeof maplibregl !== 'undefined') {
-    try {
-      initMap();
-    } catch (e) {
-      console.error(e);
-      toast('地图初始化失败，已切换到列表模式');
-      setView('list');
-    }
-  } else {
-    toast('地图组件加载失败（网络原因），已切换到列表模式');
-    setView('list');
-  }
   // 调试/测试钩子
-  window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map };
+  window.__gn = { state, selectCountry, selectCity, selectPlace, getGlobe: () => state.globe };
   if (state.mode === 'static') getStaticIndex(); // 静态模式：后台预取小索引，点新闻即秒开
   registerSW();
 })();

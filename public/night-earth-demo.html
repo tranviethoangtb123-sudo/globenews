@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Earth 夜景地球 · 独立演示</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;
+    font-family:'Inter',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+  #wrap{position:relative;width:100%;height:100vh}
+  #earth{position:absolute;inset:0}
+  #utc{position:absolute;top:16px;left:16px;z-index:10;color:rgba(255,255,255,.9);
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;letter-spacing:1px;
+    background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 12px}
+  #hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:10;
+    color:rgba(255,255,255,.55);font-size:12px;background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 14px;white-space:nowrap}
+  #info{position:absolute;top:16px;right:16px;z-index:10;color:rgba(255,255,255,.75);font-size:12px;
+    background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 12px;max-width:220px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="earth"></div>
+  <div id="utc">UTC --:--:--</div>
+  <div id="hint">左键拖拽旋转 · 滚轮/双指缩放 · 点击光点查看城市 · 蓝色圆点为定位标记</div>
+  <div id="info">蓝色定位标记默认在北京（Asia），修改位置见 night-earth.js 中 markerLonLat。</div>
+</div>
+
+<!-- 依赖：three.js r128（UMD）+ OrbitControls + NightEarth 模块 -->
+<script src="vendor/three/three.min.js"></script>
+<script src="vendor/three/OrbitControls.js"></script>
+<script src="night-earth.js"></script>
+<script>
+  const earth = new NightEarth(document.getElementById('earth'), {
+    dayTex: 'textures/earth-day.jpg',      // 白天地表贴图（替换同名文件即可换图）
+    nightTex: 'textures/earth-night.jpg',  // NASA Black Marble 夜景灯光贴图
+    bordersUrl: 'data/countries.geo.json', // 国家边界
+    citiesUrl: 'data/cities.json',         // 城市光点
+    markerLonLat: [116.4, 39.9],           // 蓝色定位标记（北京；改这里）
+    lightIntensity: 1.0,                   // 夜景灯光亮度（改这里调节，0.5~2）
+    utcEl: document.getElementById('utc'),
+    onCityClick: (city) => {
+      const name = city.z || city.n;
+      const cap = city.cap === 1 ? '（首都）' : '';
+      document.getElementById('info').innerHTML = `📍 ${name}${cap}<br>${city.n} · ${city.lat.toFixed(1)}°, ${city.lng.toFixed(1)}°`;
+    },
+    onMarkerClick: () => { document.getElementById('info').innerHTML = '📍 定位标记 · 北京（Asia）'; },
+    onCountryClick: (p) => { document.getElementById('info').innerHTML = `🏳️ ${p.zh || p.name || ''}`; }
+  });
+</script>
+</body>
+</html>
