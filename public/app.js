@@ -516,15 +516,33 @@ function initGlobe() {
   state.globe.renderer.domElement.style.display = 'block';
 }
 
-// 矢量地图懒加载（首次切到矢量时才初始化）
+// 矢量地图懒加载（MapLibre 约 1MB，首次切到矢量时才动态加载，加速首屏）
+let mapLoading = null;
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('脚本加载失败: ' + src));
+    document.head.appendChild(s);
+  });
+}
 function ensureMap() {
-  if (state.map || typeof maplibregl === 'undefined') return;
-  try {
+  if (state.map) return Promise.resolve();
+  if (mapLoading) return mapLoading;
+  mapLoading = (async () => {
+    if (typeof maplibregl === 'undefined') {
+      await loadScript('vendor/maplibre-gl.js');
+    }
+    if (!document.querySelector('link[href="vendor/maplibre-gl.css"]')) {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = 'vendor/maplibre-gl.css';
+      document.head.appendChild(l);
+    }
     initMap();
-  } catch (e) {
-    console.error(e);
-    toast('矢量地图初始化失败');
-  }
+  })().catch((e) => { console.error(e); toast('矢量地图加载失败，可继续使用夜景模式'); });
+  return mapLoading;
 }
 
 function showMode(mode) {
@@ -536,9 +554,9 @@ function showMode(mode) {
 }
 
 // 夜景 → 矢量（街道/路名）
-function switchToVector() {
+async function switchToVector() {
   if (state.mapMode === 'vector') return;
-  ensureMap();
+  await ensureMap();
   if (!state.map) return;
   const [lon, lat] = state.globe ? state.globe.getCenterLonLat() : [18, 24];
   const zoom = 6.5;
