@@ -114,6 +114,12 @@ main{flex:1;position:relative;min-height:0}
   border:1px solid var(--line2);color:var(--text);border-radius:10px;font-size:17px;
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);
 }
+#nightBtn{
+  position:absolute;right:12px;top:60px;z-index:10;min-width:72px;height:38px;padding:0 12px;
+  background:rgba(10,10,10,.85);border:1px solid var(--line2);color:var(--text);border-radius:10px;
+  font-size:12.5px;font-weight:700;font-family:var(--font-mono);backdrop-filter:blur(8px);
+}
+#nightBtn.on{background:linear-gradient(135deg,#0f2e1d,#123a24);border-color:#1f5234;color:#fff}
 
 /* ---------- 列表视图 ---------- */
 #listView{overflow-y:auto;padding:10px 12px calc(20px + env(safe-area-inset-bottom));background:var(--bg)}

@@ -12,7 +12,8 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="app.css?v=6">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="app.css?v=7">
 </head>
 <body>
 <div id="app">
@@ -40,9 +41,10 @@
   <main>
     <div id="globeView">
       <div id="map"></div>
-      <div id="utcClock">UTC --:--:--</div>
-      <div id="mapHint">左键拖拽旋转 · 滚轮/双指缩放 · 点击光点看新闻</div>
+      <div id="utcClock" style="display:none">UTC --:--:--</div>
+      <div id="mapHint">拖动旋转 · 双指缩放 · 点击城市/国家看新闻</div>
       <button id="homeBtn" title="回到全球视角">⌂</button>
+      <button id="nightBtn" title="切换矢量地图 / 夜景地球">🌙 夜景</button>
     </div>
     <div id="listView" class="hidden"></div>
     <div id="sectorsView" class="hidden">
@@ -72,9 +74,10 @@
   <div id="toast"></div>
 </div>
 
+<script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/three/three.min.js"></script>
 <script src="vendor/three/OrbitControls.js"></script>
 <script src="night-earth.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

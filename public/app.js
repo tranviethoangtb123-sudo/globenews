@@ -25,7 +25,9 @@ const state = {
   geo: null,
   styleBase: null,
   tileTiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'],
+  map: null,
   globe: null,
+  mapMode: 'vector', // vector(矢量地图,默认) | night(夜景地球)
   projection: 'globe',
   selected: null,
   selectedGeoId: null,
@@ -379,11 +381,8 @@ function initMap() {
   }), 'bottom-right');
   state.map.on('load', () => {
     bindMapEvents();
-    // 3D 模式自动开启地貌（失败则静默跳过）
+    applyLabelLang();
     try { state.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 }); } catch (e) { /* 不支持则忽略 */ }
-    $('projBtn').textContent = '3D';
-    $('projBtn').classList.add('on');
-    $('projBtn').title = '切换为 2D 平面地图';
   });
   state.map.on('error', (e) => {
     window.__mapErrors = window.__mapErrors || [];
@@ -488,11 +487,11 @@ function bindMapEvents() {
   });
 }
 
-/* ---------------- 3D 夜景地球（Three.js NightEarth 模块） ---------------- */
+/* ---------------- 3D 夜景地球（Three.js NightEarth 模块，懒加载） ---------------- */
 function initGlobe() {
+  if (state.globe) return;
   if (typeof NightEarth === 'undefined') {
-    toast('3D 引擎加载失败，已切换到列表模式');
-    setView('list');
+    toast('3D 引擎加载失败');
     return;
   }
   const bj = state.cities.find((c) => c.n.toLowerCase() === 'beijing');
@@ -508,18 +507,73 @@ function initGlobe() {
     },
     onMarkerClick: () => { if (bj) selectCity(bj); }
   });
+  state.globe.renderer.domElement.style.display = 'none';
 }
 
-function flyTo(coords, dist) {
-  if (!state.globe || !coords) return;
-  state.globe.flyTo(coords[0], coords[1], dist || 2.6);
+// 矢量地图 / 夜景地球 切换
+function toggleGlobeMode() {
+  if (state.mapMode === 'vector') {
+    state.mapMode = 'night';
+    initGlobe();
+    if (state.map) state.map.getContainer().style.display = 'none';
+    if (state.globe) state.globe.renderer.domElement.style.display = 'block';
+    $('utcClock').style.display = 'block';
+    $('nightBtn').textContent = '🗺 矢量';
+  } else {
+    state.mapMode = 'vector';
+    if (state.globe) state.globe.renderer.domElement.style.display = 'none';
+    if (state.map) {
+      state.map.getContainer().style.display = 'block';
+      setTimeout(() => state.map.resize(), 80);
+    }
+    $('utcClock').style.display = 'none';
+    $('nightBtn').textContent = '🌙 夜景';
+  }
 }
 
-function clearCountrySelected() { /* 夜景地球无国家高亮状态 */ }
+// 地图标签语言：中文=地名用 name:zh；英文=保持英文
+function applyLabelLang() {
+  if (!state.map || !state.map.isStyleLoaded()) return;
+  const zh = state.lang === 'zh';
+  const layers = state.map.getStyle().layers || [];
+  for (const l of layers) {
+    if (!l.layout || !l.layout['text-field']) continue;
+    if (l.id.startsWith('label_')) {
+      const field = zh
+        ? ['coalesce', ['get', 'name:zh'], ['get', 'name:en'], ['get', 'name']]
+        : ['case', ['has', 'name:nonlatin'], ['concat', ['get', 'name:latin'], '\n', ['get', 'name:nonlatin']], ['coalesce', ['get', 'name_en'], ['get', 'name']]];
+      try { state.map.setLayoutProperty(l.id, 'text-field', field); } catch (e) { /* ignore */ }
+    }
+  }
+  try {
+    state.map.setLayoutProperty('city-labels', 'text-field', zh ? ['coalesce', ['get', 'z'], ['get', 'n']] : ['get', 'n']);
+  } catch (e) { /* ignore */ }
+}
+
+// 传 zoom 语义值；矢量=缩放级别，夜景=换算相机距离
+function flyTo(coords, zoom) {
+  if (!coords) return;
+  if (state.mapMode === 'vector') {
+    if (!state.map) return;
+    state.map.flyTo({ center: coords, zoom: zoom || 3, duration: 1800, essential: true });
+  } else {
+    if (!state.globe) return;
+    const dist = Math.max(1.6, Math.min(2.8, 2.9 - (zoom || 3) * 0.2));
+    state.globe.flyTo(coords[0], coords[1], dist);
+  }
+}
+
+function clearCountrySelected() {
+  if (state.map && state.selectedGeoId != null) {
+    try { state.map.setFeatureState({ source: 'countries', id: state.selectedGeoId }, { selected: false }); } catch (e) { /* ignore */ }
+  }
+  state.selectedGeoId = null;
+}
 
 function zoomForCountry(c) {
   const a = c.area || 1e6;
-  return Math.max(2.4, Math.min(4.4, 4.6 - Math.log10(a + 1) * 0.35));
+  const z = Math.round(9 - Math.log10(a + 1) * 1.1);
+  return Math.max(2.8, Math.min(7.5, z));
 }
 
 /* ---------------- 选中与新闻 ---------------- */
@@ -530,7 +584,14 @@ function selectCountry(c, opts = {}) {
     q: queryName(c),
     coords: (c.lat != null && c.lng != null) ? [c.lng, c.lat] : null
   };
-  if (state.globe && opts.fly !== false && state.selected.coords) flyTo(state.selected.coords, zoomForCountry(c));
+  if (state.mapMode === 'vector' && state.map) {
+    const feat = state.geo.features.find((f) => f.properties.iso2 === c.iso2);
+    if (feat && feat.id != null) {
+      state.selectedGeoId = feat.id;
+      try { state.map.setFeatureState({ source: 'countries', id: feat.id }, { selected: true }); } catch (e) { /* ignore */ }
+    }
+  }
+  if (opts.fly !== false && state.selected.coords) flyTo(state.selected.coords, zoomForCountry(c));
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
   if (state.view === 'list') highlightListCountry(c.iso2);
@@ -544,7 +605,7 @@ function selectCity(c) {
     q: (state.lang === 'zh' && rec.z) ? rec.z : rec.n,
     coords: [rec.lng, rec.lat]
   };
-  if (state.globe) flyTo(state.selected.coords, 1.7);
+  flyTo(state.selected.coords, 6.5);
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
 }
@@ -556,7 +617,7 @@ function selectPlace(pl) {
     q: (state.lang === 'zh' && pl.nameZh) ? pl.nameZh : pl.name,
     coords: pl.coords || null
   };
-  if (state.globe && pl.coords) flyTo(pl.coords, 1.9);
+  if (pl.coords) flyTo(pl.coords, 7);
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
 }
@@ -706,6 +767,7 @@ const needsZh = (s) => {
 function fillTranslation(a, it) {
   const slot = a.querySelector('.a-tz');
   if (!slot) return;
+  if (state.lang !== 'zh') return; // 英文模式：全部英文，不显示中文
   if (it && it.tz) { slot.textContent = it.tz; return; }
   const text = it ? it.title : '';
   if (needsZh(text)) {
@@ -1180,6 +1242,7 @@ function setLang(l) {
   $('langBtn').textContent = l === 'zh' ? 'EN' : '中';
   document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
   renderList($('searchInput').value);
+  applyLabelLang(); // 地图标签：中文=name:zh，英文=英文
   if (state.selected) {
     if (state.selected.type === 'country') {
       const c = state.countryByIso2.get(state.selected.iso2);
@@ -1200,8 +1263,8 @@ function setView(v) {
   if (v === 'list') renderList($('searchInput').value);
   if (v === 'sectors') renderSectors();
   if (v === 'sources') renderSources();
-  if (v === 'globe' && state.globe) {
-    setTimeout(() => state.globe.resize(), 60);
+  if (v === 'globe') {
+    setTimeout(() => { if (state.map) state.map.resize(); if (state.globe) state.globe.resize(); }, 60);
   }
 }
 
@@ -1238,8 +1301,13 @@ function bindUI() {
   });
 
   $('homeBtn').addEventListener('click', () => {
-    if (state.globe) state.globe.reset();
+    if (state.mapMode === 'vector' && state.map) {
+      state.map.flyTo({ center: [18, 24], zoom: 1.05, duration: 1200, essential: true });
+    } else if (state.globe) {
+      state.globe.reset();
+    }
   });
+  $('nightBtn').addEventListener('click', () => toggleGlobeMode());
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
 }
@@ -1274,13 +1342,18 @@ function registerSW() {
     await loadData();
     renderHotChips();
     renderList('');
-    initGlobe();
+    if (typeof maplibregl !== 'undefined') {
+      initMap(); // 默认矢量地图（大洲大洋/街道路名/点击选点）
+    } else {
+      toast('地图引擎加载失败，已使用夜景模式');
+      toggleGlobeMode();
+    }
   } catch (e) {
     console.error(e);
     toast('数据加载失败，请确认已运行 node scripts/setup-data.mjs');
   }
   // 调试/测试钩子
-  window.__gn = { state, selectCountry, selectCity, selectPlace, getGlobe: () => state.globe };
+  window.__gn = { state, selectCountry, selectCity, selectPlace, getMap: () => state.map, getGlobe: () => state.globe };
   if (state.mode === 'static') getStaticIndex(); // 静态模式：后台预取小索引，点新闻即秒开
   registerSW();
 })();
