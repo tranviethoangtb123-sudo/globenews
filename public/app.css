@@ -15,6 +15,7 @@
   --r:12px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+a{color:inherit;text-decoration:none}
 html,body{height:100%}
 body{
   background:var(--bg);color:var(--text);
@@ -26,17 +27,18 @@ body{
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input{font-family:inherit}
 
-/* ---------- 顶栏（玻璃拟态） ---------- */
+/* ---------- 顶栏（两行：品牌行 + 导航行，玻璃拟态） ---------- */
 #topbar{
-  display:flex;align-items:center;gap:10px;padding:10px 12px calc(8px + env(safe-area-inset-top));
+  display:flex;flex-direction:column;gap:8px;padding:10px 12px calc(8px + env(safe-area-inset-top));
   padding-top:calc(10px + env(safe-area-inset-top));
   background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   border-bottom:1px solid var(--line);z-index:30;flex-shrink:0;
 }
+.topbar-row{display:flex;align-items:center;justify-content:space-between;width:100%}
 .brand{display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-size:15px;font-weight:700;letter-spacing:1px;white-space:nowrap;color:#fff}
 .brand span{color:#fff}
-.seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px;margin:0 auto}
-.seg button{padding:5px 14px;border-radius:8px;font-size:13px;color:var(--dim);transition:all .15s;font-weight:500}
+.seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px;width:100%}
+.seg button{flex:1;min-width:0;padding:6px 2px;border-radius:8px;font-size:13px;color:var(--dim);transition:all .15s;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg button.on{background:var(--green);color:#050505;font-weight:700}
 .chip{
   padding:5px 12px;border-radius:8px;border:1px solid var(--line2);font-size:12px;color:var(--dim);
@@ -192,17 +194,17 @@ main{flex:1;position:relative;min-height:0}
   border-radius:10px;padding:8px 12px;margin-bottom:10px;
 }
 .article{
-  background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:9px;
+  display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:9px;
   cursor:pointer;transition:transform .1s;
 }
 .article:active{transform:scale(.985);background:#161616}
-.article .a-title{font-size:15px;font-weight:600;line-height:1.5;color:var(--text);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.article .a-tz{font-size:13px;color:#fff;line-height:1.5;margin-top:5px;border-left:2px solid rgba(255,255,255,.5);padding-left:8px}
-.article .a-snippet{font-size:12.5px;color:var(--dim);margin-top:6px;line-height:1.55}
-.article .a-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--faint);font-family:var(--font-mono)}
-.article .a-src{color:#fff;font-weight:600;word-break:break-all}
-.article .a-new{font-size:9.5px;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:1px 5px;font-weight:700}
-.article .a-open{margin-left:auto;font-size:11px;color:var(--faint)}
+.a-title{font-size:15px;font-weight:600;line-height:1.5;color:#fff;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.a-tz{font-size:13px;color:#fff;line-height:1.5;margin-top:5px;border-left:2px solid rgba(255,255,255,.5);padding-left:8px}
+.a-snippet{font-size:12.5px;color:var(--dim);margin-top:6px;line-height:1.55}
+.a-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--faint);font-family:var(--font-mono);flex-wrap:wrap}
+.a-src{color:#fff;font-weight:600;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.a-new{font-size:9.5px;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:1px 5px;font-weight:700;flex-shrink:0}
+.a-open{margin-left:auto;font-size:11px;color:var(--faint);flex-shrink:0}
 
 /* ---------- 板块过滤（新闻面板内） ---------- */
 .news-filter{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
