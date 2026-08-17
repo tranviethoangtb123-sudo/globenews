@@ -80,8 +80,8 @@ async function fetchWindow(q, lang, when, attempt = 0, deadline = 0) {
       lastErr = new Error(`${host} 返回空`);
     } catch (e) { lastErr = e; }
   }
-  if (attempt < 1 && (!deadline || Date.now() < deadline)) {
-    await sleep(500);
+  if (attempt < 2 && (!deadline || Date.now() < deadline)) {
+    await sleep(1000 + attempt * 1000); // 重试退避 1s / 2s
     return fetchWindow(q, lang, when, attempt + 1, deadline);
   }
   throw lastErr || new Error('全部域名不可用');
@@ -155,7 +155,7 @@ async function translateItems(items, cap) {
 }
 
 async function fetchLocation(q, lang) {
-  const deadline = Date.now() + 30000; // 每个地点 30s 总时限
+  const deadline = Date.now() + 45000; // 每个地点 45s 总时限
   let best = { window: '', label: '', items: [] };
   let lastErr = null;
   for (const [w, label] of WINDOWS) {
@@ -191,7 +191,7 @@ console.log(`[fetch] 查询清单 ${list.length} 条（国家 ${countries.length
 /* ---------- 抓取 ---------- */
 const entries = {};
 const t0 = Date.now();
-let ok = 0, fail = 0;
+let ok = 0, fail = 0, consecFail = 0;
 for (let i = 0; i < list.length; i++) {
   const { key, q, loc } = list[i];
   const lang = key.endsWith('|zh') ? 'zh' : 'en';
@@ -200,15 +200,24 @@ for (let i = 0; i < list.length; i++) {
     if (res.items.length) {
       entries[key] = { window: res.window, label: res.label, fetchedAt: new Date().toISOString(), loc, items: res.items };
       ok++;
+      consecFail = 0;
     }
   } catch (e) {
     fail++;
+    consecFail++;
     if (fail <= 5) console.log(`[fetch] 失败 ${key} (${q}): ${e.message}`);
+    // 连续失败大概率被 Google 限流：整体退避 15-25s 再继续
+    if (consecFail >= 8) {
+      const backoff = 15000 + Math.random() * 10000;
+      console.log(`[fetch] 连续失败 ${consecFail} 次，退避 ${(backoff / 1000).toFixed(0)}s 后继续`);
+      await sleep(backoff);
+      consecFail = 0;
+    }
   }
   if ((i + 1) % 50 === 0 || i === list.length - 1) {
     console.log(`[fetch] ${i + 1}/${list.length} 成功=${ok} 失败=${fail} 耗时=${((Date.now() - t0) / 1000).toFixed(0)}s`);
   }
-  await sleep(350); // 限速，避免触发反爬
+  await sleep(1200 + Math.random() * 800); // 限速：1.2-2s 随机间隔，避免触发反爬
 }
 
 /* ---------- 输出：小索引 + 按需分片 + 标题扫描索引 + 板块聚合（点开才下载，秒开） ---------- */
@@ -272,7 +281,7 @@ if (!SKIP_SOURCES) {
       if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`);
     }
     if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
-    await sleep(250);
+    await sleep(600 + Math.random() * 400); // 来源抓取同样限速
   }
   await writeFile(join(OUT, 'news-sources.json'), JSON.stringify({ generatedAt: new Date().toISOString(), sources: sourceOut }));
   console.log(`[fetch] 来源抓取完成：${sourceOut.length} 个来源`);
