@@ -125,30 +125,34 @@ const tzNeed = (t) => {
 };
 const tzQueue = [];
 let tzRunning = 0;
-const TZ_MAX_CONC = 4;
+const TZ_MAX_CONC = 6;
 function translateText(text) {
   return new Promise((resolve) => {
     if (!tzNeed(text)) return resolve('');
-    tzQueue.push({ text: text.slice(0, 1500), resolve });
+    tzQueue.push({ text: text.slice(0, 1500), resolve, tries: 0 });
     pumpTz();
   });
 }
 function pumpTz() {
   while (tzRunning < TZ_MAX_CONC && tzQueue.length) {
-    const { text, resolve } = tzQueue.shift();
+    const { text, resolve, tries } = tzQueue.shift();
     tzRunning++;
     fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`, {
       signal: AbortSignal.timeout(12000), headers: UA
     })
       .then((r) => r.json())
-      .then((j) => resolve((j && j[0] ? j[0].map((x) => x[0]).join('') : '').trim()))
-      .catch(() => resolve(''))
+      .then((j) => {
+        const out = (j && j[0] ? j[0].map((x) => x[0]).join('') : '').trim();
+        if (!out && tries < 1) { tzQueue.push({ text, resolve, tries: tries + 1 }); pumpTz(); return; }
+        resolve(out);
+      })
+      .catch(() => { if (tries < 1) { tzQueue.push({ text, resolve, tries: tries + 1 }); pumpTz(); return; } resolve(''); })
       .finally(() => { tzRunning--; pumpTz(); });
   }
 }
-async function translateItems(items, cap) {
+async function translateItems(items) {
   const jobs = [];
-  for (const it of (items || []).slice(0, cap)) {
+  for (const it of (items || [])) {
     if (tzNeed(it.title) && !it.tz) jobs.push(translateText(it.title).then((t) => { it.tz = t; }));
   }
   await Promise.all(jobs);
@@ -231,7 +235,7 @@ const sectors = {};
 const seenLink = new Set();
 for (const key in entries) {
   const e = entries[key];
-  await translateItems(e.items, 6); // 云端预翻译前 6 条（写入 it.tz）
+  await translateItems(e.items); // 云端预翻译全部标题（写入 it.tz，客户端直接显示）
   const fname = `${hash(key)}.json`;
   await writeFile(join(OUT_N, fname), JSON.stringify(e));
   index.entries[key] = { f: `n/${fname}`, loc: e.loc, window: e.window, label: e.label, n: e.items.length };
@@ -261,7 +265,7 @@ if (!SKIP_SOURCES) {
       const items = parseRssItems(await r.text());
       if (items.length) {
         const top = items.slice(0, 8);
-        await translateItems(top, 5); // 来源标题也预翻译
+        await translateItems(top); // 来源标题全部预翻译
         sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top });
         // 同时并入板块聚合（来源名作为地点标签）
         for (const it of top) {

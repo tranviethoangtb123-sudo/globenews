@@ -666,7 +666,7 @@ async function newsFromStatic(sel) {
       if (hits.length) {
         return {
           window: 'scan', label: '全文匹配',
-          items: hits.map((h) => ({ title: h.t, link: h.l, source: '', published: h.p || '', snippet: '', cat: h.cat, loc: h.loc })),
+          items: hits.map((h) => ({ title: h.t, link: h.l, source: '', published: h.p || '', snippet: '', cat: h.cat, loc: h.loc, tz: h.tz || '' })),
           fetchedAt: idx.generatedAt
         };
       }
@@ -985,7 +985,8 @@ async function renderSectors() {
   const total = Object.values(buckets).reduce((n, a) => n + a.length, 0);
   const mk = (key, label) => {
     const b = el('button', 'sector-tab' + (state.sectorSel === key ? ' on' : ''), label);
-    b.addEventListener('click', () => { state.sectorSel = key; renderSectorsList(buckets); });
+    b.dataset.key = key;
+    b.addEventListener('click', () => { state.sectorSel = key; syncTabOn(tabs, key); renderSectorsList(buckets); });
     tabs.appendChild(b);
   };
   mk('ALL', `全部 ${total}`);
@@ -1070,14 +1071,23 @@ async function renderSources() {
   const groups = [...new Set(srcs.map((s) => s.group))];
   tabs.innerHTML = '';
   const allBtn = el('button', 'sector-tab' + (state.srcGroup === null ? ' on' : ''), '全部');
-  allBtn.addEventListener('click', () => { state.srcGroup = null; renderSourcesList(data); });
+  allBtn.dataset.key = '';
+  allBtn.addEventListener('click', () => { state.srcGroup = null; syncTabOn(tabs, ''); renderSourcesList(data); });
   tabs.appendChild(allBtn);
   for (const g of groups) {
     const b = el('button', 'sector-tab' + (state.srcGroup === g ? ' on' : ''), g);
-    b.addEventListener('click', () => { state.srcGroup = state.srcGroup === g ? null : g; renderSourcesList(data); });
+    b.dataset.key = g;
+    b.addEventListener('click', () => { state.srcGroup = state.srcGroup === g ? null : g; syncTabOn(tabs, state.srcGroup || ''); renderSourcesList(data); });
     tabs.appendChild(b);
   }
   renderSourcesList(data);
+}
+
+// 同步 tab 选中态：点击标签只重渲染列表，这里负责把 .on 挪到新选中的标签
+function syncTabOn(tabsEl, selKey) {
+  for (const b of tabsEl.querySelectorAll('.sector-tab')) {
+    b.classList.toggle('on', b.dataset.key === (selKey == null ? '' : selKey));
+  }
 }
 
 function renderSourcesList(data) {
