@@ -688,9 +688,14 @@ function translateText(text) {
   transQueue = p.catch(() => {});
   return p;
 }
-const isEn = (s) => /[a-zA-Z]{4}/.test(s || '') && !/[\u4e00-\u9fff]/.test(s || '');
+// 非中文标题一律附中文翻译（含英文/日文假名/韩文/阿拉伯文等）
+const needsZh = (s) => {
+  const t = s || '';
+  if (!/[a-zA-Z]{2}/.test(t) && !/[\u3040-\u30ff\uac00-\ud7af\u0600-\u06ff\u0400-\u04ff]/.test(t)) return false;
+  return !/[\u4e00-\u9fff]/.test(t) || /[\u3040-\u30ff\uac00-\ud7af]/.test(t);
+};
 function attachTranslation(a, text) {
-  if (!isEn(text)) return;
+  if (!needsZh(text)) return;
   const slot = a.querySelector('.a-tz');
   if (!slot) return;
   translateText(text).then((zh) => { if (zh && slot && slot.parentNode) slot.textContent = zh; });
