@@ -60,8 +60,10 @@
         markerLabel: '',
         radius: 1,
         maxDist: 6,
-        minDist: 1.25,
+        minDist: 1.3,
+        zoomSwitchDist: 1.55,          // 缩放到该距离时自动切矢量地图（看街道路名）
         lightIntensity: 1.0,           // 夜景灯光亮度（改这里调节）
+        onZoomIn: null,
         onCityClick: null,
         onCountryClick: null,
         onMarkerClick: null,
@@ -177,6 +179,7 @@
     buildOverlays() {
       this.buildBorders();
       this.buildCityDots();
+      this.buildCountryLabels();
       this.buildMarker();
     }
 
@@ -208,32 +211,74 @@
       this.scene.add(this.borderLines);
     }
 
-    // 城市光点（暖白光点 + 首都亮斑）
+    // 城市光点（远景=首都/大城市，近景=全部城市，渐进显示）
     buildCityDots() {
       const cities = this.data.cities;
       if (!cities || !cities.length) return;
       const r = this.opts.radius * 1.006;
       const glow = makeGlowTexture('rgba(255,214,150,1)', 'rgba(255,180,90,0)');
-      const glowCap = makeGlowTexture('rgba(255,214,150,1)', 'rgba(255,180,90,0)');
-      const all = [], caps = [];
+      const all = [], major = [];
       this.cityIndex = [];
       cities.forEach((c, i) => {
         const v = latLonToVec3(c.lng, c.lat, r);
-        (c.cap === 1 ? caps : all).push(v.x, v.y, v.z);
+        const isMajor = c.cap === 1 || (c.r != null && c.r <= 2) || (c.pop >= 3000000);
+        (isMajor ? major : all).push(v.x, v.y, v.z);
         this.cityIndex.push(i);
       });
-      const mk = (arr, size, tex, color) => {
+      const mk = (arr, size, color) => {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
         return new THREE.Points(g, new THREE.PointsMaterial({
-          size, map: tex, transparent: true, depthWrite: false,
-          sizeAttenuation: true, color
+          size, map: glow, transparent: true, depthWrite: false, sizeAttenuation: true, color
         }));
       };
-      this.cityPoints = mk(all, 0.018, glow, 0xffd9a0);
-      this.capitalPoints = mk(caps, 0.026, glowCap, 0xffd9a0);
-      this.scene.add(this.cityPoints);
-      if (caps.length) this.scene.add(this.capitalPoints);
+      // 远景：主要城市圆点；近景：全部城市圆点
+      this.cityPointsFar = mk(major, 0.02, 0xffd9a0);
+      this.cityPointsAll = mk(all, 0.016, 0xffd9a0);
+      this.cityPointsAll.visible = false;
+      this.scene.add(this.cityPointsFar);
+      this.scene.add(this.cityPointsAll);
+    }
+
+    // 国家名称标签（本国语言），中景显示
+    buildCountryLabels() {
+      const countries = this.data.countries;
+      if (!countries || !countries.length) return;
+      const r = this.opts.radius * 1.012;
+      this.countryLabels = [];
+      this.countryLabelGroup = new THREE.Group();
+      for (const c of countries) {
+        if (c.lat == null || c.lng == null) continue;
+        const label = c.native || c.name;
+        if (!label) continue;
+        const tex = this.makeTextTexture(label);
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0.92 });
+        const spr = new THREE.Sprite(mat);
+        const v = latLonToVec3(c.lng, c.lat, r);
+        spr.position.copy(v);
+        const s = Math.max(0.045, Math.min(0.11, 0.11 - Math.abs(c.lat) * 0.0004));
+        spr.scale.set(s * 6, s, 1);
+        this.countryLabelGroup.add(spr);
+        this.countryLabels.push({ spr, lat: c.lat, lng: c.lng });
+      }
+      this.countryLabelGroup.visible = false;
+      this.scene.add(this.countryLabelGroup);
+    }
+
+    makeTextTexture(text) {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, 512, 64);
+      ctx.font = '500 34px Inter, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.strokeText(text, 256, 34);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.fillText(text, 256, 34);
+      return new THREE.CanvasTexture(c);
     }
 
     // 蓝色定位标记（默认亚洲/北京）
@@ -272,11 +317,11 @@
         ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(ndc, this.camera);
-        raycaster.params.Points.threshold = 0.04;
+        raycaster.params.Points.threshold = 0.05;
         raycaster.params.Line.threshold = 0.012;
-        const hits = raycaster.intersectObjects([this.cityPoints, this.capitalPoints, this.marker, this.borderLines], false);
+        const hits = raycaster.intersectObjects([this.cityPointsFar, this.cityPointsAll, this.marker, this.borderLines], false);
         for (const h of hits) {
-          if (h.object === this.cityPoints || h.object === this.capitalPoints) {
+          if (h.object === this.cityPointsFar || h.object === this.cityPointsAll) {
             const idx = this.cityIndex[h.index];
             if (this.opts.onCityClick && idx != null) this.opts.onCityClick(this.data.cities[idx]);
             return;
@@ -335,9 +380,26 @@
     }
 
     animate() {
+      let zoomed = false;
       const loop = () => {
         requestAnimationFrame(loop);
         this.controls.update();
+        const dist = this.camera.position.length();
+        // 渐进显示：远景=主要城市圆点；中景=全部城市+国家名（本国语言）；近景=交给矢量地图（街道）
+        if (this.cityPointsFar) this.cityPointsFar.visible = true;
+        if (this.cityPointsAll) this.cityPointsAll.visible = dist < 2.6;
+        if (this.countryLabelGroup) {
+          this.countryLabelGroup.visible = dist >= 1.55 && dist < 3.6;
+          if (this.countryLabelGroup.visible) {
+            const s = THREE.MathUtils.clamp(0.65 + (3.6 - dist) * 0.4, 0.6, 1.6);
+            this.countryLabelGroup.scale.setScalar(s);
+          }
+        }
+        if (!zoomed && dist < this.opts.zoomSwitchDist) {
+          zoomed = true;
+          if (this.opts.onZoomIn) this.opts.onZoomIn();
+        }
+        if (zoomed && dist > this.opts.zoomSwitchDist + 0.35) zoomed = false;
         if (this.markerRing) {
           const t = performance.now() / 1000;
           const s = 0.035 + 0.012 * Math.sin(t * 2);
@@ -347,6 +409,24 @@
         this.renderer.render(this.scene, this.camera);
       };
       loop();
+    }
+
+    // 当前缩放距离
+    getDistance() { return this.camera.position.length(); }
+
+    // 当前视角正对的地表经纬度
+    getCenterLonLat() {
+      const v = this.camera.position.clone().normalize();
+      const lat = Math.asin(THREE.MathUtils.clamp(v.y, -1, 1)) * 180 / Math.PI;
+      const lon = Math.atan2(v.z, -v.x) * 180 / Math.PI - 180;
+      return [((lon % 360) + 360) % 360, lat];
+    }
+
+    // 设定视角（经纬度 + 距离）
+    setView(lon, lat, dist) {
+      const v = latLonToVec3(lon, lat, this.opts.radius).normalize().multiplyScalar(dist || 2.6);
+      this.camera.position.copy(v);
+      this.controls.update();
     }
 
     resize() {
