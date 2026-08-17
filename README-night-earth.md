@@ -64,7 +64,7 @@ HTML 引入方式（经典 `<script>`，无打包器）：
 ### 调整参数（在 `night-earth.js` 顶部 `opts` 中）
 - **定位点位置**：`markerLonLat: [经度, 纬度]`（当前 `[116.4, 39.9]` = 北京）
 - **夜景灯光亮度**：`lightIntensity`（默认 `1.0`，0.5 变暗、2 更亮；shader 里 `uNightScale`）
-- 拖拽速度 `rotateSpeed`、缩放范围 `minDist/maxDist`、太阳方向 `uLight`、冰盖纬度阈值（shader `smoothstep(0.84, 0.97, ...)`）
+- 拖拽速度 `rotateSpeed`、缩放范围 `minDist/maxDist`、陆地隐约可见度（shader `day * 0.07`）、冰盖纬度阈值（shader `smoothstep(0.88, 0.985, ...)`）
 - 初始相机视角：`camera.position`（构造器内 `set(2.4, 1.0, 2.1)`）
 - 关闭自动自转已内置：`autoRotate = false`
 

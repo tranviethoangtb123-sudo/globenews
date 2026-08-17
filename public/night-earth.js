@@ -134,7 +134,6 @@
       const uniforms = {
         uDay: { value: dayTex },
         uNight: { value: nightTex },
-        uLight: { value: new THREE.Vector3(0.55, 0.25, 0.8).normalize() },
         uNightScale: { value: this.opts.lightIntensity }
       };
       const mat = new THREE.ShaderMaterial({
@@ -147,27 +146,27 @@
             vNormal = normalize(mat3(modelMatrix) * normal);
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }`,
+        // 暗黑夜景：无太阳光照面，陆地极暗隐约可见，城市灯光自发光，极地暗蓝冰盖
         fragmentShader: `
           uniform sampler2D uDay;
           uniform sampler2D uNight;
-          uniform vec3 uLight;
           uniform float uNightScale;
           varying vec2 vUv;
           varying vec3 vNormal;
           void main() {
-            vec3 n = normalize(vNormal);
-            float lambert = max(dot(n, normalize(uLight)), 0.0);
-            vec3 day  = texture2D(uDay, vUv).rgb;
-            vec3 night = texture2D(uNight, vUv).rgb * uNightScale;
-            // 亮面=白天地表，暗面=夜景灯光自发光
-            vec3 col = mix(night, day, smoothstep(0.02, 0.42, lambert));
-            // 低饱和度、冷峻写实
-            col = mix(vec3(dot(col, vec3(0.333))), col, 0.55);
-            // 南北极淡蓝冰盖（纬度 > ~58° 渐入）
-            float lat = asin(clamp(n.y, -1.0, 1.0));
-            float pole = smoothstep(0.84, 0.97, abs(lat));
-            vec3 ice = vec3(0.66, 0.78, 0.94);
-            col = mix(col, ice, pole * 0.55);
+            vec3 day = texture2D(uDay, vUv).rgb;
+            vec3 night = texture2D(uNight, vUv).rgb;
+            vec3 land = day * 0.07;                 // 陆地压到 7%，隐约可辨
+            vec3 lights = night * uNightScale;      // 夜景灯光自发光
+            vec3 col = max(land, lights);
+            col = max(col, vec3(0.004));            // 最低亮度，避免纯黑死黑
+            // 低饱和度冷峻
+            col = mix(vec3(dot(col, vec3(0.333))), col, 0.5);
+            // 南北极暗蓝冰盖（更弱、贴合暗黑风）
+            float lat = asin(clamp(vNormal.y, -1.0, 1.0));
+            float pole = smoothstep(0.88, 0.985, abs(lat));
+            vec3 ice = vec3(0.32, 0.40, 0.54);
+            col = mix(col, ice, pole * 0.6);
             gl_FragColor = vec4(col, 1.0);
           }`
       });
