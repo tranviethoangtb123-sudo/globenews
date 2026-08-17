@@ -565,8 +565,9 @@ function showMode(mode) {
 // 夜景 → 矢量（街道/路名）
 async function switchToVector() {
   if (state.mapMode === 'vector') return;
+  toast('正在加载街道地图…');
   await ensureMap();
-  if (!state.map) return;
+  if (!state.map) { toast('街道地图加载失败，请稍后重试'); return; }
   const [lon, lat] = state.globe ? state.globe.getCenterLonLat() : [18, 24];
   const zoom = 6.5;
   showMode('vector');

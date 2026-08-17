@@ -60,8 +60,8 @@
         markerLabel: '',
         radius: 1,
         maxDist: 6,
-        minDist: 1.6,
-        zoomSwitchDist: 1.55,          // 缩放到该距离时自动切矢量地图（看街道路名）
+        minDist: 1.15,                // 夜景球最近缩放（低于切换阈值，放大到最近点自动进街道地图）
+        zoomSwitchDist: 1.35,         // 缩放到该距离时自动切矢量地图（看街道路名）
         lightIntensity: 1.0,           // 夜景灯光亮度（改这里调节）
         onZoomIn: null,
         onCityClick: null,
@@ -92,7 +92,7 @@
       this.controls.maxDistance = this.opts.maxDist;
 
       // 相机初始视角（亚洲朝向）
-      this.camera.position.set(2.4, 1.0, 2.1);
+      this.camera.position.set(-0.5, 1.35, -2.85);
       this.controls.target.set(0, 0, 0);
       this.controls.update();
 
@@ -252,17 +252,24 @@
 
     makeTextTexture(text) {
       const c = document.createElement('canvas');
-      c.width = 512; c.height = 64;
+      c.width = 512; c.height = 72;
       const ctx = c.getContext('2d');
-      ctx.clearRect(0, 0, 512, 64);
-      ctx.font = '500 34px Inter, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.clearRect(0, 0, 512, 72);
+      ctx.font = '500 30px Inter, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
+      const w = ctx.measureText(text).width;
+      // 半透明深色圆角底板（让文字像贴在地图上的标注，而不是飘在太空）
+      const px = 12, py = 14, pw = w + px * 2, ph = 72 - py * 2;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(256 - pw / 2, py, pw, ph, 10) : ctx.rect(256 - pw / 2, py, pw, ph);
+      ctx.fillStyle = 'rgba(6,11,22,0.78)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(text, 256, 34);
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.fillText(text, 256, 34);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillText(text, 256, 36);
       return new THREE.CanvasTexture(c);
     }
 
@@ -370,15 +377,29 @@
         requestAnimationFrame(loop);
         this.controls.update();
         const dist = this.camera.position.length();
-        // 渐进层次：远景=主要城市圆点+轮廓；中景=全部城市圆点+国家名（本国语言）；近景=清爽（交给矢量地图）
+        // 渐进层次（worldmonitor 风格）：
+        //   远景(>3.4)：主要城市圆点 + 轮廓；中景(2.7~3.4)：+全部城市圆点；
+        //   近景(<2.7)：仅视野中心附近的国家名（小字号、屏幕字号恒定、限数量）；<1.55 切矢量地图
         if (this.cityPointsFar) this.cityPointsFar.visible = true;
-        if (this.cityPointsAll) this.cityPointsAll.visible = dist > 2.2 && dist < 3.6;
-        if (this.countryLabelGroup) {
-          this.countryLabelGroup.visible = dist > 2.1 && dist < 3.1;
-          if (this.countryLabelGroup.visible) {
-            const s = THREE.MathUtils.clamp(0.7 + (3.1 - dist) * 0.7, 0.7, 1.5);
-            this.countryLabelGroup.scale.setScalar(s);
+        if (this.cityPointsAll) this.cityPointsAll.visible = dist > 1.7 && dist < 3.2;
+        if (this.countryLabelGroup && this.countryLabels.length) {
+          const viewDir = this.camera.position.clone().normalize();
+          const showLabels = dist < 2.7 && dist > 1.3;
+          let shown = 0;
+          for (const lb of this.countryLabels) {
+            if (!showLabels) { lb.spr.visible = false; continue; }
+            const ang = lb.spr.position.clone().normalize().angleTo(viewDir);
+            if (ang < 0.72 && shown < 10) {          // 只显示视野前方 ~41° 内的名称，最多 10 个
+              lb.spr.visible = true;
+              const sc = 0.038 * (dist / 2.2);        // 屏幕字号恒定
+              lb.spr.scale.set(sc * 7, sc, 1);
+              lb.spr.material.opacity = 0.95;
+              shown++;
+            } else {
+              lb.spr.visible = false;
+            }
           }
+          this.countryLabelGroup.visible = showLabels;
         }
         if (!zoomed && dist < this.opts.zoomSwitchDist) {
           zoomed = true;
