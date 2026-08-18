@@ -318,12 +318,16 @@ const countryZhQueried = new Set(Object.keys(entries).filter((k) => k.startsWith
 const finalEntries = {}; // key -> { items, loc, window, label }
 
 // 4a) 国家：全部国家，只要有相关新闻（含实体关联）即生成条目
+//     多国归属优先：涉及多国的新闻不设上限、排在前列，确保出现在所有相关国家列表
+const byRec = (a, b) => new Date(b.published || 0) - new Date(a.published || 0);
 for (const c of countries) {
   const key = `country|${c.iso2}|en`;
   const origin = entries[key];
   const rel = poolArr.filter((it) => it.regions.has(c.iso2));
   if (!rel.length && !origin) continue;
-  const items = cap(rel.length ? rel : origin.items, 150);
+  const multi = rel.filter((it) => it.regions.size >= 2).slice().sort(byRec);
+  const single = rel.filter((it) => it.regions.size < 2).slice().sort(byRec).slice(0, 120);
+  const items = [...multi, ...single];
   finalEntries[key] = { items, loc: c.name, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
   if (countryZhQueried.has(`country|${c.iso2}|zh`)) {
     finalEntries[`country|${c.iso2}|zh`] = { items, loc: c.zh, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
