@@ -282,8 +282,9 @@ if (!SKIP_SOURCES) {
         const items = parseRssItems(await r.text());
         if (items.length) {
           const top = items.slice(0, 8);
-          sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top });
           for (const it of top) addPool(it, '📰 ' + src.name, null);
+          // 用池内（翻译后）的条目作为来源展示数据
+          sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top.map((it) => pool.get(it.link)).filter(Boolean) });
         }
       } catch (e) { if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`); }
       if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
