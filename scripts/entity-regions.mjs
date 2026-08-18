@@ -29,6 +29,7 @@ const COUNTRY_ALIASES = {
 export function createRegionMatcher(countries, cities, entityMap) {
   const aliasRegions = {}; // 小写别名 -> [regions]
   const add = (alias, regions) => {
+    if (!Array.isArray(regions)) return; // 防御：只接受数组（避免误入非映射字段）
     const k = String(alias || '').trim().toLowerCase();
     if (k.length < 2) return; // 避免单字母误匹配
     aliasRegions[k] = regions;
@@ -46,7 +47,7 @@ export function createRegionMatcher(countries, cities, entityMap) {
   }
   // 3) 实体知识图谱
   for (const cat of Object.keys(entityMap || {})) {
-    if (cat.startsWith('_')) continue;
+    if (cat.startsWith('_') || cat === 'queries') continue; // queries 是专题抓取清单，不是映射表
     for (const [alias, regions] of Object.entries(entityMap[cat] || {})) add(alias, regions);
   }
 
