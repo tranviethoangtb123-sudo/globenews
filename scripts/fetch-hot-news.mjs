@@ -191,6 +191,14 @@ for (const c of topCities) {
   queries.push({ key: `city|${c.n.toLowerCase()}|en`, q: c.n, loc: c.n });
   if (c.z) queries.push({ key: `city|${c.z.toLowerCase()}|zh`, q: c.z, loc: c.z });
 }
+// 实体专题查询（公司/指数/人物/组织/海峡等）：确保实体相关新闻必定被抓取，再按图谱多对多归属
+const entityMapQueries = loadEntityMap();
+const entityQueryRegions = new Map(); // entity key -> [regions]
+(entityMapQueries.queries || []).forEach((eq, i) => {
+  const key = `entity|${i}|en`;
+  entityQueryRegions.set(key, eq.regions || []);
+  queries.push({ key, q: eq.q, loc: eq.loc || eq.q });
+});
 const list0 = LIMIT ? queries.slice(0, LIMIT) : queries;
 const list = ONLY ? list0.filter((x) => ONLY.some((k) => x.key.toLowerCase().includes(k.toLowerCase()) || x.q.toLowerCase().includes(k.toLowerCase()))) : list0;
 console.log(`[fetch] 查询清单 ${list.length} 条（国家 ${countries.length} / 城市 ${topCities.length}）`);
@@ -240,22 +248,24 @@ const topCityByN = new Map(topCities.map((c) => [c.n.toLowerCase(), c]));
 
 // 0) 全局新闻池（按 link 去重；loc 保留首个来源标签）
 const pool = new Map(); // link -> item
-const addPool = (it, loc, originIso2) => {
+const addPool = (it, loc, originIso2, originRegions) => {
   if (!it || !it.link) return;
   const prev = pool.get(it.link);
   if (prev) {
     if (!prev.originIso2 && originIso2) prev.originIso2 = originIso2;
+    if (!prev.originRegions && originRegions && originRegions.length) prev.originRegions = originRegions;
     if (!prev.loc && loc) prev.loc = loc;
     return;
   }
-  pool.set(it.link, { ...it, loc: loc || '', originIso2: originIso2 || null });
+  pool.set(it.link, { ...it, loc: loc || '', originIso2: originIso2 || null, originRegions: (originRegions && originRegions.length) ? originRegions : null });
 };
 for (const key in entries) {
   const e = entries[key];
-  let iso2 = null;
+  let iso2 = null, originRegions = null;
   if (key.startsWith('country|')) iso2 = key.split('|')[1];
   else if (key.startsWith('city|')) { const rec = topCityByN.get(key.split('|')[1]); if (rec) iso2 = rec.c; }
-  for (const it of e.items) addPool(it, e.loc, iso2);
+  else if (key.startsWith('entity|')) originRegions = entityQueryRegions.get(key) || null;
+  for (const it of e.items) addPool(it, e.loc, iso2, originRegions);
 }
 
 // 1) 抓取「新闻来源」feeds（同时并入池，参与多对多归属）
@@ -297,6 +307,7 @@ for (const it of poolArr) {
   if (!set) { set = matcher.matchRegions(text); regionCache.set(text, set); }
   it.regions = new Set(set);
   if (it.originIso2) it.regions.add(it.originIso2); // 原抓取地点必然归属
+  if (it.originRegions) for (const r of it.originRegions) it.regions.add(r); // 实体专题查询：图谱归属兜底
 }
 console.log(`[实体] 图谱别名 ${matcher.aliasCount} 个 / 新闻池 ${poolArr.length} 篇，多对多归属完成`);
 
@@ -311,7 +322,7 @@ for (const c of countries) {
   const origin = entries[key];
   const rel = poolArr.filter((it) => it.regions.has(c.iso2));
   if (!rel.length && !origin) continue;
-  const items = cap(rel.length ? rel : origin.items, 50);
+  const items = cap(rel.length ? rel : origin.items, 100);
   finalEntries[key] = { items, loc: c.name, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
   if (countryZhQueried.has(`country|${c.iso2}|zh`)) {
     finalEntries[`country|${c.iso2}|zh`] = { items, loc: c.zh, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
@@ -328,13 +339,13 @@ for (const key of Object.keys(entries)) {
   const merged = new Map();
   for (const it of rel) merged.set(it.link, it);
   for (const it of origin.items) merged.set(it.link, it);
-  finalEntries[key] = { items: cap([...merged.values()], 40), loc: origin.loc, window: origin.window, label: origin.label };
+  finalEntries[key] = { items: cap([...merged.values()], 60), loc: origin.loc, window: origin.window, label: origin.label };
 }
 
 // 4c) 国际 / 公海 / 争议地区（无归属地区分类）
 const intlItems = poolArr.filter((it) => it.regions.has('INTL'));
 if (intlItems.length) {
-  const items = cap(intlItems, 50);
+  const items = cap(intlItems, 100);
   finalEntries['place|international|zh'] = { items, loc: '国际', window: '', label: '国际 · 公海 · 争议地区' };
   finalEntries['place|international|en'] = { items, loc: 'International', window: '', label: 'International' };
 }
