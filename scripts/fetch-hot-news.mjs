@@ -12,6 +12,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyCategories } from './classify-news.mjs';
+import { createRegionMatcher, loadEntityMap } from './entity-regions.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // 数据目录自动探测（public/data 或 data），随站点发布时数据在 public/data
@@ -25,6 +26,7 @@ const LIMIT = (() => { const i = args.indexOf('--limit'); return i >= 0 ? parseI
 const ONLY = (() => { const i = args.indexOf('--only'); return i >= 0 ? args[i + 1].split(',').map((s) => s.trim()).filter(Boolean) : null; })();
 const SKIP_TILES = args.includes('--skip-tiles');
 const SKIP_SOURCES = args.includes('--skip-sources');
+const SKIP_TZ = args.includes('--skip-tz'); // 本地调试用：跳过云端翻译（本机常被墙）
 
 const UA = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36' };
 const MIN_ITEMS = 4;
@@ -151,6 +153,7 @@ function pumpTz() {
   }
 }
 async function translateItems(items) {
+  if (SKIP_TZ) return; // 本地调试：跳过翻译
   const jobs = [];
   for (const it of (items || [])) {
     if (tzNeed(it.title) && !it.tz) jobs.push(translateText(it.title).then((t) => { it.tz = t; }));
@@ -224,78 +227,147 @@ for (let i = 0; i < list.length; i++) {
   await sleep(1200 + Math.random() * 800); // 限速：1.2-2s 随机间隔，避免触发反爬
 }
 
-/* ---------- 输出：小索引 + 按需分片 + 标题扫描索引 + 板块聚合（点开才下载，秒开） ---------- */
+/* ================= 实体关联：多对多归属（替代纯关键词匹配） =================
+   1) 汇总全局新闻池（查询结果 + 来源 feeds，按 link 去重）
+   2) 全量翻译（每篇只译一次）
+   3) 实体→地区 匹配（entity-map.json 知识图谱 + 国家/城市名），得到每篇的关联地区集合
+   4) 生成 国家 / 城市 / 国际(公海·争议地区) 条目：每篇新闻自动归入所有相关地区
+   ====================================================================== */
 const OUT_N = join(OUT, 'n');
 mkdirSync(OUT_N, { recursive: true });
 const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36); };
+const topCityByN = new Map(topCities.map((c) => [c.n.toLowerCase(), c]));
 
-const index = { generatedAt: new Date().toISOString(), count: ok, entries: {} };
-const titles = [];
-const sectors = {};
-const seenLink = new Set();
+// 0) 全局新闻池（按 link 去重；loc 保留首个来源标签）
+const pool = new Map(); // link -> item
+const addPool = (it, loc, originIso2) => {
+  if (!it || !it.link) return;
+  const prev = pool.get(it.link);
+  if (prev) {
+    if (!prev.originIso2 && originIso2) prev.originIso2 = originIso2;
+    if (!prev.loc && loc) prev.loc = loc;
+    return;
+  }
+  pool.set(it.link, { ...it, loc: loc || '', originIso2: originIso2 || null });
+};
 for (const key in entries) {
   const e = entries[key];
-  await translateItems(e.items); // 云端预翻译全部标题（写入 it.tz，客户端直接显示）
-  const fname = `${hash(key)}.json`;
-  await writeFile(join(OUT_N, fname), JSON.stringify(e));
-  index.entries[key] = { f: `n/${fname}`, loc: e.loc, window: e.window, label: e.label, n: e.items.length };
-  for (const it of e.items) {
-    if (!it.link || seenLink.has(it.link)) continue;
-    seenLink.add(it.link);
-    titles.push({ t: it.title, l: it.link, loc: e.loc, cat: it.cat, p: it.published, tz: it.tz || '' });
-    for (const c of it.cat || []) {
-      (sectors[c] = sectors[c] || []).push({ t: it.title, l: it.link, loc: e.loc, s: it.source, p: it.published, sn: it.snippet, tz: it.tz || '' });
-    }
-  }
+  let iso2 = null;
+  if (key.startsWith('country|')) iso2 = key.split('|')[1];
+  else if (key.startsWith('city|')) { const rec = topCityByN.get(key.split('|')[1]); if (rec) iso2 = rec.c; }
+  for (const it of e.items) addPool(it, e.loc, iso2);
 }
-await writeFile(join(OUT, 'news-hot.json'), JSON.stringify(index)); // 索引很小，启动即拉取
-await writeFile(join(OUT, 'news-titles.json'), JSON.stringify({ generatedAt: index.generatedAt, items: titles })); // 任意地名全文扫描（懒加载）
 
-/* ---------- 抓取「新闻来源」feeds（用户提供的国内/国外来源分类） ---------- */
+// 1) 抓取「新闻来源」feeds（同时并入池，参与多对多归属）
 const sourceOut = [];
 if (!SKIP_SOURCES) {
   try {
-  const sd = JSON.parse(await readFile(join(__dirname, 'sources-data.json'), 'utf8'));
-  const so = (sd && sd.sources) || [];
-  for (let i = 0; i < so.length; i++) {
-    const src = so[i];
-    try {
-      const r = await fetch(src.url, { signal: AbortSignal.timeout(8000), headers: UA });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const items = parseRssItems(await r.text());
-      if (items.length) {
-        const top = items.slice(0, 8);
-        await translateItems(top); // 来源标题全部预翻译
-        sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top });
-        // 同时并入板块聚合（来源名作为地点标签）
-        for (const it of top) {
-          for (const c of it.cat || []) {
-            if (!seenLink.has(it.link)) {
-              seenLink.add(it.link);
-              titles.push({ t: it.title, l: it.link, loc: '📰 ' + src.name, cat: it.cat, p: it.published, tz: it.tz || '' });
-            }
-            const b = (sectors[c] = sectors[c] || []);
-            if (b.length < 60 && !b.some((x) => x.l === it.link)) {
-              b.push({ t: it.title, l: it.link, loc: '📰 ' + src.name, s: it.source || src.name, p: it.published, sn: it.snippet, tz: it.tz || '' });
-            }
-          }
+    const sd = JSON.parse(await readFile(join(__dirname, 'sources-data.json'), 'utf8'));
+    const so = (sd && sd.sources) || [];
+    for (let i = 0; i < so.length; i++) {
+      const src = so[i];
+      try {
+        const r = await fetch(src.url, { signal: AbortSignal.timeout(8000), headers: UA });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const items = parseRssItems(await r.text());
+        if (items.length) {
+          const top = items.slice(0, 8);
+          sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top });
+          for (const it of top) addPool(it, '📰 ' + src.name, null);
         }
-      }
-    } catch (e) {
-      if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`);
+      } catch (e) { if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`); }
+      if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
+      await sleep(600 + Math.random() * 400);
     }
-    if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
-    await sleep(600 + Math.random() * 400); // 来源抓取同样限速
-  }
-  await writeFile(join(OUT, 'news-sources.json'), JSON.stringify({ generatedAt: new Date().toISOString(), sources: sourceOut }));
-  console.log(`[fetch] 来源抓取完成：${sourceOut.length} 个来源`);
+    await writeFile(join(OUT, 'news-sources.json'), JSON.stringify({ generatedAt: new Date().toISOString(), sources: sourceOut }));
+    console.log(`[fetch] 来源抓取完成：${sourceOut.length} 个来源`);
   } catch (e) { console.warn('[fetch] 来源抓取跳过：', e.message); }
 }
 
+// 2) 全量翻译（去重后每篇只译一次）
+const poolArr = [...pool.values()];
+await translateItems(poolArr);
+
+// 3) 实体→地区 匹配（知识图谱多对多）
+const matcher = createRegionMatcher(countries, cities, loadEntityMap());
+const regionCache = new Map();
+for (const it of poolArr) {
+  const text = (it.title || '') + ' ' + (it.snippet || '');
+  let set = regionCache.get(text);
+  if (!set) { set = matcher.matchRegions(text); regionCache.set(text, set); }
+  it.regions = new Set(set);
+  if (it.originIso2) it.regions.add(it.originIso2); // 原抓取地点必然归属
+}
+console.log(`[实体] 图谱别名 ${matcher.aliasCount} 个 / 新闻池 ${poolArr.length} 篇，多对多归属完成`);
+
+// 4) 条目生成
+const cap = (arr, n) => arr.slice().sort((a, b) => new Date(b.published || 0) - new Date(a.published || 0)).slice(0, n);
+const countryZhQueried = new Set(Object.keys(entries).filter((k) => k.startsWith('country|') && k.endsWith('|zh')));
+const finalEntries = {}; // key -> { items, loc, window, label }
+
+// 4a) 国家：全部国家，只要有相关新闻（含实体关联）即生成条目
+for (const c of countries) {
+  const key = `country|${c.iso2}|en`;
+  const origin = entries[key];
+  const rel = poolArr.filter((it) => it.regions.has(c.iso2));
+  if (!rel.length && !origin) continue;
+  const items = cap(rel.length ? rel : origin.items, 50);
+  finalEntries[key] = { items, loc: c.name, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
+  if (countryZhQueried.has(`country|${c.iso2}|zh`)) {
+    finalEntries[`country|${c.iso2}|zh`] = { items, loc: c.zh, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
+  }
+}
+
+// 4b) 城市：原查询成功的城市 + 池内「标题/摘要提到该城市」的新闻
+for (const key of Object.keys(entries)) {
+  if (!key.startsWith('city|')) continue;
+  const origin = entries[key];
+  const name = key.split('|')[1];
+  const rec = topCityByN.get(name);
+  const rel = rec ? poolArr.filter((it) => matcher.cityMatch(rec.n, rec.z, (it.title || '') + ' ' + (it.snippet || ''))) : origin.items;
+  const merged = new Map();
+  for (const it of rel) merged.set(it.link, it);
+  for (const it of origin.items) merged.set(it.link, it);
+  finalEntries[key] = { items: cap([...merged.values()], 40), loc: origin.loc, window: origin.window, label: origin.label };
+}
+
+// 4c) 国际 / 公海 / 争议地区（无归属地区分类）
+const intlItems = poolArr.filter((it) => it.regions.has('INTL'));
+if (intlItems.length) {
+  const items = cap(intlItems, 50);
+  finalEntries['place|international|zh'] = { items, loc: '国际', window: '', label: '国际 · 公海 · 争议地区' };
+  finalEntries['place|international|en'] = { items, loc: 'International', window: '', label: 'International' };
+}
+
+// 5) 输出：小索引 + 按需分片 + 标题索引 + 板块聚合
+const index = { generatedAt: new Date().toISOString(), count: Object.keys(finalEntries).length, entries: {} };
+const titles = [];
+const sectors = {};
+const seenLink = new Set();
+for (const key in finalEntries) {
+  const e = finalEntries[key];
+  const clean = e.items.map((it) => { const { regions, ...rest } = it; return rest; }); // 去掉运行时字段
+  const fname = `${hash(key)}.json`;
+  await writeFile(join(OUT_N, fname), JSON.stringify({ window: e.window, label: e.label, fetchedAt: index.generatedAt, loc: e.loc, items: clean }));
+  index.entries[key] = { f: `n/${fname}`, loc: e.loc, window: e.window, label: e.label, n: clean.length };
+}
+for (const it of poolArr) {
+  if (!it.link || seenLink.has(it.link)) continue;
+  seenLink.add(it.link);
+  titles.push({ t: it.title, l: it.link, loc: it.loc, cat: it.cat, p: it.published, tz: it.tz || '' });
+  for (const c of it.cat || []) {
+    const b = (sectors[c] = sectors[c] || []);
+    if (b.length < 60 && !b.some((x) => x.l === it.link)) {
+      b.push({ t: it.title, l: it.link, loc: it.loc, s: it.source, p: it.published, sn: it.snippet, tz: it.tz || '' });
+    }
+  }
+}
 for (const c in sectors) {
   sectors[c].sort((a, b) => new Date(b.p || 0) - new Date(a.p || 0));
   if (sectors[c].length > 60) sectors[c] = sectors[c].slice(0, 60);
 }
+await writeFile(join(OUT, 'news-hot.json'), JSON.stringify(index)); // 索引很小，启动即拉取
+await writeFile(join(OUT, 'news-titles.json'), JSON.stringify({ generatedAt: index.generatedAt, items: titles })); // 任意地名全文扫描（懒加载）
 await writeFile(join(OUT, 'news-sectors.json'), JSON.stringify({ generatedAt: index.generatedAt, sectors })); // 板块视图（懒加载）
 console.log(`[fetch] 输出分片 ${Object.keys(index.entries).length} 个 / 标题索引 ${titles.length} / 板块 ${Object.keys(sectors).length} 类`);
 

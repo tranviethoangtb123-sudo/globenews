@@ -558,6 +558,17 @@ function selectPlace(pl) {
   loadNews(state.selected);
 }
 
+// 国际 / 公海 / 争议地区（无归属地区的新闻入口）
+function selectInternational() {
+  clearCountrySelected();
+  state.selected = {
+    type: 'place', name: 'International', nameZh: state.lang === 'zh' ? '国际 · 公海 · 争议地区' : 'International · High Seas',
+    q: 'international', international: true, coords: null
+  };
+  openSheet(sheetTitle(state.selected), '');
+  loadNews(state.selected);
+}
+
 function sheetTitle(sel) {
   if (sel.type === 'country') {
     const en = sel.name && sel.name !== sel.nameZh ? ` · ${sel.name}` : '';
@@ -640,7 +651,10 @@ async function newsFromStatic(sel) {
   const lang = state.lang;
   const tries = [];
   const push = (k) => { const e = idx.entries[k]; if (e && !tries.includes(e)) tries.push(e); };
-  if (sel.type === 'country') {
+  if (sel.international) {
+    push('place|international|zh');
+    push('place|international|en');
+  } else if (sel.type === 'country') {
     push(`country|${sel.iso2}|${lang}`);
     push(`country|${sel.iso2}|en`);
     push(`country|${sel.iso2}|zh`);
@@ -897,6 +911,11 @@ function renderList(filterText) {
   }
 
   const groups = groupCountries();
+  // 国际 / 公海 / 争议地区（无归属地区：公海、南极、海峡等）
+  const intlRow = el('div', 'country-row intl-row',
+    `<span class="cname">${state.lang === 'zh' ? '国际 · 公海 · 争议地区' : 'International · High Seas'}<i>${state.lang === 'zh' ? '公海 / 南极 / 海峡 / 无归属地区' : 'High seas · Antarctica · Straits'}</i></span><span class="chev">▸</span>`);
+  intlRow.addEventListener('click', () => selectInternational());
+  root.appendChild(intlRow);
   for (const g of groups) {
     const group = el('div', 'lv-group');
     const head = el('div', 'lv-group-head', `${state.lang === 'zh' ? g.zh : g.en} <span class="cnt">${g.countries.length} 个</span> <span class="chev">▾</span>`);
