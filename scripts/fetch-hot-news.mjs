@@ -322,7 +322,7 @@ for (const c of countries) {
   const origin = entries[key];
   const rel = poolArr.filter((it) => it.regions.has(c.iso2));
   if (!rel.length && !origin) continue;
-  const items = cap(rel.length ? rel : origin.items, 100);
+  const items = cap(rel.length ? rel : origin.items, 150);
   finalEntries[key] = { items, loc: c.name, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
   if (countryZhQueried.has(`country|${c.iso2}|zh`)) {
     finalEntries[`country|${c.iso2}|zh`] = { items, loc: c.zh, window: origin ? origin.window : '', label: origin ? origin.label : '实体关联' };
