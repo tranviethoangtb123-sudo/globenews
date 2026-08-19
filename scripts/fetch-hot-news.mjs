@@ -290,7 +290,6 @@ if (!SKIP_SOURCES) {
       if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
       await sleep(600 + Math.random() * 400);
     }
-    await writeFile(join(OUT, 'news-sources.json'), JSON.stringify({ generatedAt: new Date().toISOString(), sources: sourceOut }));
     console.log(`[fetch] 来源抓取完成：${sourceOut.length} 个来源`);
   } catch (e) { console.warn('[fetch] 来源抓取跳过：', e.message); }
 }
@@ -298,6 +297,12 @@ if (!SKIP_SOURCES) {
 // 2) 全量翻译（去重后每篇只译一次）
 const poolArr = [...pool.values()];
 await translateItems(poolArr);
+
+// 来源文件在翻译之后写盘（否则 tz 为空）
+if (!SKIP_SOURCES && sourceOut.length) {
+  await writeFile(join(OUT, 'news-sources.json'), JSON.stringify({ generatedAt: new Date().toISOString(), sources: sourceOut }));
+  console.log(`[fetch] 来源文件已写（${sourceOut.length} 个来源，含中文翻译）`);
+}
 
 // 3) 实体→地区 匹配（知识图谱多对多）
 const matcher = createRegionMatcher(countries, cities, loadEntityMap());
