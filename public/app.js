@@ -50,6 +50,20 @@ const CONTINENTS = [
   { id: 'oceania', zh: '大洋洲', en: 'Oceania' },
   { id: 'polar', zh: '南极洲', en: 'Antarctica' }
 ];
+// 「国际 · 公海 · 争议地区」子区域（无归属地区的分类，关键词过滤）
+const INTL_SUBS = [
+  { id: 'seas', zh: '公海 · 国际水域', en: 'High Seas', descZh: '公海 / 国际水域 / 远洋', descEn: 'International waters · Open sea',
+    re: /公海|国际水域|high seas|international waters|open sea|open ocean|远洋/i },
+  { id: 'oceans', zh: '大洋 · 远海', en: 'Oceans', descZh: '太平洋 / 大西洋 / 印度洋', descEn: 'Pacific / Atlantic / Indian Ocean',
+    re: /太平洋|大西洋|印度洋|pacific ocean|atlantic ocean|indian ocean/i },
+  { id: 'antarctica', zh: '南极', en: 'Antarctica', descZh: '南极洲', descEn: 'Antarctica',
+    re: /南极|南极洲|antarctica/i },
+  { id: 'arctic', zh: '北极', en: 'Arctic', descZh: '北极地区', descEn: 'Arctic region',
+    re: /北极|arctic/i },
+  { id: 'orgs', zh: '联合国 · 国际组织', en: 'UN · Intl Orgs', descZh: '联合国 / 世卫 / 国际法院等', descEn: 'UN / WHO / ICJ etc.',
+    re: /联合国|united nations|世卫|世界卫生组织|世界银行|world bank|国际货币基金|imf|国际刑事法院|国际法院|g20|oecd|wto|世贸|icc|icj/i },
+  { id: 'other', zh: '其他国际事务', en: 'Other Intl', descZh: '其余国际新闻', descEn: 'Other international news', re: null }
+];
 const continentOf = (c) => {
   if (c.region === 'Asia') return 'asia';
   if (c.region === 'Europe') return 'europe';
@@ -558,12 +572,12 @@ function selectPlace(pl) {
   loadNews(state.selected);
 }
 
-// 国际 / 公海 / 争议地区（无归属地区的新闻入口）
-function selectInternational() {
+// 国际 / 公海 / 争议地区 的子区域新闻入口（逐级打开）
+function selectInternationalSub(sub) {
   clearCountrySelected();
   state.selected = {
-    type: 'place', name: 'International', nameZh: state.lang === 'zh' ? '国际 · 公海 · 争议地区' : 'International · High Seas',
-    q: 'international', international: true, coords: null
+    type: 'place', name: sub.en, nameZh: sub.zh, q: sub.zh,
+    international: true, intlSub: sub, coords: null
   };
   openSheet(sheetTitle(state.selected), '');
   loadNews(state.selected);
@@ -669,7 +683,16 @@ async function newsFromStatic(sel) {
   }
   for (const e of tries) {
     const entry = await getEntryFile(e.f);
-    if (entry && entry.items && entry.items.length) return { ...entry, fetchedAt: idx.generatedAt };
+    if (entry && entry.items && entry.items.length) {
+      if (sel.intlSub) {
+        const sub = sel.intlSub;
+        const match = (it) => sub.re.test((it.title || '') + ' ' + (it.snippet || ''));
+        let items = sub.re ? entry.items.filter(match) : entry.items.filter((it) => !INTL_SUBS.some((s) => s.re && s.re.test((it.title || '') + ' ' + (it.snippet || ''))));
+        if (!items.length) items = []; // 该子区域暂无新闻
+        return { ...entry, items, fetchedAt: idx.generatedAt };
+      }
+      return { ...entry, fetchedAt: idx.generatedAt };
+    }
   }
   // 兜底：标题全文匹配（懒加载 titles 索引）
   const ql = sel.q.toLowerCase();
@@ -911,11 +934,22 @@ function renderList(filterText) {
   }
 
   const groups = groupCountries();
-  // 国际 / 公海 / 争议地区（无归属地区：公海、南极、海峡等）
-  const intlRow = el('div', 'country-row intl-row',
-    `<span class="cname">${state.lang === 'zh' ? '国际 · 公海 · 争议地区' : 'International · High Seas'}<i>${state.lang === 'zh' ? '公海 / 南极 / 海峡 / 无归属地区' : 'High seas · Antarctica · Straits'}</i></span><span class="chev">▸</span>`);
-  intlRow.addEventListener('click', () => selectInternational());
-  root.appendChild(intlRow);
+  // 国际 / 公海 / 争议地区（无归属地区，折叠分组 + 子区域逐级打开）
+  const intlGroup = el('div', 'lv-group');
+  const intlHead = el('div', 'lv-group-head',
+    `${state.lang === 'zh' ? '国际 · 公海 · 争议地区' : 'International · High Seas'} <span class="cnt">${INTL_SUBS.length} 类</span> <span class="chev">▾</span>`);
+  const intlBody = el('div', 'lv-group-body');
+  for (const sub of INTL_SUBS) {
+    const row = el('div', 'country-row intl-sub-row');
+    row.innerHTML = `<span class="cname">${state.lang === 'zh' ? sub.zh : sub.en}<i>${state.lang === 'zh' ? sub.descZh : sub.descEn}</i></span>
+      <button class="news-btn">新闻</button>`;
+    row.addEventListener('click', () => selectInternationalSub(sub));
+    intlBody.appendChild(row);
+  }
+  intlHead.addEventListener('click', () => intlGroup.classList.toggle('open'));
+  intlGroup.appendChild(intlHead);
+  intlGroup.appendChild(intlBody);
+  root.appendChild(intlGroup);
   for (const g of groups) {
     const group = el('div', 'lv-group');
     const head = el('div', 'lv-group-head', `${state.lang === 'zh' ? g.zh : g.en} <span class="cnt">${g.countries.length} 个</span> <span class="chev">▾</span>`);
@@ -1186,6 +1220,51 @@ function renderSearchDropdown(text) {
   box.classList.remove('hidden');
 }
 
+/* ---------------- 全网新闻搜索（顶栏检索框） ---------------- */
+let newsTitlesPromise = null;
+function getNewsTitles() {
+  if (!newsTitlesPromise) {
+    newsTitlesPromise = fetch('data/news-titles.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return newsTitlesPromise;
+}
+
+function renderNewsSearch(q) {
+  const box = $('newsResults');
+  const text = (q || '').trim().toLowerCase();
+  if (!text) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.innerHTML = '';
+  getNewsTitles().then((ti) => {
+    if (String($('topSearch').value || '').trim().toLowerCase() !== text) return; // 输入已变化
+    if (!ti || !ti.items || !ti.items.length) {
+      box.appendChild(el('div', 'nr-item', '<div class="t">暂无新闻数据，请稍后再试</div>'));
+      box.classList.remove('hidden');
+      return;
+    }
+    const hits = ti.items.filter((it) => ((it.t || '') + ' ' + (it.tz || '') + ' ' + (it.loc || '')).toLowerCase().includes(text));
+    box.innerHTML = '';
+    if (!hits.length) {
+      box.appendChild(el('div', 'nr-item', '<div class="t">未找到匹配的新闻</div>'));
+      box.classList.remove('hidden');
+      return;
+    }
+    box.appendChild(el('div', 'nr-head', `共 ${hits.length} 条相关新闻（点击打开原文）`));
+    for (const it of hits.slice(0, 30)) {
+      const a = el('a', 'nr-item',
+        `<div class="t">${esc(it.t)}</div>` +
+        (state.lang === 'zh' && it.tz ? `<div class="z">${esc(it.tz)}</div>` : '') +
+        `<div class="m">${esc(it.loc || '')}${it.p ? ' · ' + relTime(it.p) : ''}</div>`);
+      a.href = it.l;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      box.appendChild(a);
+    }
+    box.classList.remove('hidden');
+  });
+}
+
 /* ---------------- UI 绑定 ---------------- */
 function setLang(l) {
   state.lang = l;
@@ -1249,7 +1328,17 @@ function bindUI() {
   });
   document.addEventListener('click', (e) => {
     if (!$('searchWrap').contains(e.target)) $('searchResults').classList.add('hidden');
+    if (!$('topSearchWrap').contains(e.target)) $('newsResults').classList.add('hidden');
   });
+
+  // 顶栏全网新闻搜索
+  const topSearch = $('topSearch');
+  let nsTimer = null;
+  topSearch.addEventListener('input', () => {
+    clearTimeout(nsTimer);
+    nsTimer = setTimeout(() => renderNewsSearch(topSearch.value), 200);
+  });
+  topSearch.addEventListener('keydown', (e) => { if (e.key === 'Enter') renderNewsSearch(topSearch.value); });
 
   $('homeBtn').addEventListener('click', () => {
     if (state.map) state.map.flyTo({ center: [18, 24], zoom: 1.05, duration: 1800, essential: true });
