@@ -276,6 +276,7 @@ if (!SKIP_SOURCES) {
     const so = (sd && sd.sources) || [];
     for (let i = 0; i < so.length; i++) {
       const src = so[i];
+      let srcItems = [];
       try {
         const r = await fetch(src.url, { signal: AbortSignal.timeout(8000), headers: UA });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -284,9 +285,11 @@ if (!SKIP_SOURCES) {
           const top = items.slice(0, 8);
           for (const it of top) addPool(it, '📰 ' + src.name, null);
           // 用池内（翻译后）的条目作为来源展示数据
-          sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: top.map((it) => pool.get(it.link)).filter(Boolean) });
+          srcItems = top.map((it) => pool.get(it.link)).filter(Boolean);
         }
       } catch (e) { if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`); }
+      // 无论是否打通都保留来源（空内容也显示名称）
+      sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: srcItems });
       if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
       await sleep(600 + Math.random() * 400);
     }

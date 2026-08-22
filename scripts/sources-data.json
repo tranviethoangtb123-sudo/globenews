@@ -26,6 +26,22 @@
       "group": "财经/金融/市场/股市/公司/IPO/央行/外汇"
     },
     {
+      "id": "jin10-g",
+      "name": "金十数据",
+      "url": "https://news.google.com/rss/search?q=site:jin10.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+      "lang": "zh",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇"
+    },
+    {
+      "id": "eastmoney-g",
+      "name": "东方财富",
+      "url": "https://news.google.com/rss/search?q=site:eastmoney.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+      "lang": "zh",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇"
+    },
+    {
       "id": "36kr-g",
       "name": "36氪",
       "url": "https://news.google.com/rss/search?q=site:36kr.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
