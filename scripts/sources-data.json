@@ -2216,6 +2216,350 @@
       "lang": "en",
       "region": "国外",
       "group": "社会/文化/教育/体育/娱乐"
+    },
+    {
+      "id": "新华社-g",
+      "name": "新华社",
+      "region": "国内",
+      "group": "官方/权威时政",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:xinhuanet.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "央视新闻-g",
+      "name": "央视新闻",
+      "region": "国内",
+      "group": "官方/权威时政",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:cctv.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "中国政府网-g",
+      "name": "中国政府网",
+      "region": "国内",
+      "group": "官方/权威时政",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:gov.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "外交部网站-g",
+      "name": "外交部网站",
+      "region": "国内",
+      "group": "官方/权威时政",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:fmprc.gov.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "财新网-g",
+      "name": "财新网",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:caixin.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "第一财经-g",
+      "name": "第一财经",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:yicai.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "21世纪经济报道-g",
+      "name": "21世纪经济报道",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:21jingji.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "证券时报-g",
+      "name": "证券时报",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:stcn.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "经济观察报-g",
+      "name": "经济观察报",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:eeo.com.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "每日经济新闻-g",
+      "name": "每日经济新闻",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:nbd.com.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "界面新闻-g",
+      "name": "界面新闻",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:jiemian.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "华尔街见闻-g",
+      "name": "华尔街见闻",
+      "region": "国内",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:wallstreetcn.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "钛媒体-g",
+      "name": "钛媒体",
+      "region": "国内",
+      "group": "科技/AI",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:tmtpost.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "环球时报-g",
+      "name": "环球时报",
+      "region": "国内",
+      "group": "国际/地缘/深度",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:globaltimes.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "观察者网-g",
+      "name": "观察者网",
+      "region": "国内",
+      "group": "国际/地缘/深度",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:guancha.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "澎湃新闻-g",
+      "name": "澎湃新闻",
+      "region": "国内",
+      "group": "国际/地缘/深度",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:thepaper.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "南方周末-g",
+      "name": "南方周末",
+      "region": "国内",
+      "group": "国际/地缘/深度",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:infzm.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "财新数据通-g",
+      "name": "财新数据通",
+      "region": "国内",
+      "group": "宏观经济/数据/政策",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=%22%E8%B4%A2%E6%96%B0%E6%95%B0%E6%8D%AE%E9%80%9A%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "大公文汇-g",
+      "name": "大公文汇",
+      "region": "国内",
+      "group": "港澳台/区域",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:takungpao.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "财新网专栏-g",
+      "name": "财新网专栏",
+      "region": "国内",
+      "group": "人物/观点/评论",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:opinion.caixin.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "经济观察报专栏-g",
+      "name": "经济观察报专栏",
+      "region": "国内",
+      "group": "人物/观点/评论",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:opinion.eeo.com.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "council-on-foreign-relations-w",
+      "name": "Council on Foreign Relations",
+      "region": "国外",
+      "group": "外交/政策/战争/地区冲突/地缘",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:cfr.org&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "carnegie-endowment-w",
+      "name": "Carnegie Endowment",
+      "region": "国外",
+      "group": "外交/政策/战争/地区冲突/地缘",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:carnegieendowment.org&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "jerusalem-post-w",
+      "name": "Jerusalem Post",
+      "region": "国外",
+      "group": "外交/政策/战争/地区冲突/地缘",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:jpost.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "kyiv-independent-w",
+      "name": "Kyiv Independent",
+      "region": "国外",
+      "group": "外交/政策/战争/地区冲突/地缘",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:kyivindependent.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "seeking-alpha-w",
+      "name": "Seeking Alpha",
+      "region": "国外",
+      "group": "财经/金融/市场/股市/公司/IPO/央行/外汇",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:seekingalpha.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "asharq-al-awsat-w",
+      "name": "Asharq Al-Awsat",
+      "region": "国外",
+      "group": "综合国际/中东",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:aawsat.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "al-ahram-w",
+      "name": "Al Ahram",
+      "region": "国外",
+      "group": "综合国际/中东",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:ahram.org.eg&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "联合早报-w",
+      "name": "联合早报",
+      "region": "国外",
+      "group": "综合国际/中东",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:zaobao.com.sg&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "oilprice-com-w",
+      "name": "OilPrice.com",
+      "region": "国外",
+      "group": "贵金属/稀土/石油/大宗商品",
+      "lang": "en",
+      "url": "https://oilprice.com/rss/main"
+    },
+    {
+      "id": "project-syndicate-w",
+      "name": "Project Syndicate",
+      "region": "国外",
+      "group": "人物/观点/深度评论",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:project-syndicate.org&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "harvard-business-review-w",
+      "name": "Harvard Business Review",
+      "region": "国外",
+      "group": "人物/观点/深度评论",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:hbr.org&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "reuters-breaking-news-w",
+      "name": "Reuters Breaking News",
+      "region": "国外",
+      "group": "突发/快讯/滚动",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=\"Reuters\"+\"breaking\"&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "ap-alerts-w",
+      "name": "AP Alerts",
+      "region": "国外",
+      "group": "突发/快讯/滚动",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:apnews.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "quora-w",
+      "name": "Quora",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:quora.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "stocktwits-w",
+      "name": "StockTwits",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:stocktwits.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "tradingview-社区-w",
+      "name": "TradingView 社区",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://news.google.com/rss/search?q=site:tradingview.com&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "id": "reddit-r-wallstreetbets-w",
+      "name": "Reddit r/wallstreetbets",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://www.reddit.com/r/wallstreetbets/.rss"
+    },
+    {
+      "id": "reddit-r-stocks-w",
+      "name": "Reddit r/stocks",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://www.reddit.com/r/stocks/.rss"
+    },
+    {
+      "id": "reddit-r-investing-w",
+      "name": "Reddit r/investing",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://www.reddit.com/r/investing/.rss"
+    },
+    {
+      "id": "微博-g",
+      "name": "微博",
+      "region": "国内",
+      "group": "论坛/社区",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:weibo.com&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "v2ex-g",
+      "name": "V2EX",
+      "region": "国内",
+      "group": "论坛/社区",
+      "lang": "zh",
+      "url": "https://www.v2ex.com/index.xml"
+    },
+    {
+      "id": "nga-g",
+      "name": "NGA",
+      "region": "国内",
+      "group": "论坛/社区",
+      "lang": "zh",
+      "url": "https://news.google.com/rss/search?q=site:bbs.nga.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
     }
   ]
 }
