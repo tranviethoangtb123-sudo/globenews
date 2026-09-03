@@ -1348,6 +1348,26 @@ function bindUI() {
   });
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
+
+  // 全局「刷新」：重载当前数据 + 通知云端重新抓取最新新闻
+  $('refreshBtn').addEventListener('click', async () => {
+    const btn = $('refreshBtn');
+    btn.classList.add('busy');
+    // 1) 清缓存、重载当前视图
+    staticIndexPromise = null;
+    entryCache = null;
+    newsTitlesPromise = null;
+    if (state.selected) loadNews(state.selected);
+    // 2) 通知云端（Netlify Function 触发 GitHub Actions）
+    try {
+      const r = await fetch('/.netlify/functions/refresh', { method: 'POST', signal: AbortSignal.timeout(20000) });
+      const j = await r.json().catch(() => null);
+      toast((j && j.ok) || r.ok ? '已通知云端抓取最新新闻，约 40 分钟后更新' : '云端通知失败，请稍后再试');
+    } catch (e) {
+      toast('当前页面暂不支持云端刷新，请使用 netlify.app 网址');
+    }
+    btn.classList.remove('busy');
+  });
 }
 
 /* ---------------- 工具 ---------------- */
