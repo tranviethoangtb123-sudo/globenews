@@ -128,28 +128,46 @@ const tzNeed = (t) => {
 const tzQueue = [];
 let tzRunning = 0;
 const TZ_MAX_CONC = 6;
+// 翻译端点回退链：gtx 被数据中心 IP 封锁/限流时自动切换；连续失败即熔断
+const TZ_ENDPOINTS = [
+  { name: 'gtx', url: (t) => `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(t)}`, timeout: 4000 },
+  { name: 'gtx-web', url: (t) => `https://translate.google.com/translate_a/single?client=webapp&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(t)}`, timeout: 4000 },
+  { name: 'mymemory', url: (t) => `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t.slice(0, 480))}&langpair=en|zh-CN`, timeout: 8000 }
+];
+const tzStats = { gtx: 0, 'gtx-web': 0, mymemory: 0, fail: 0 };
+const tzFail = {};
+const tzDisabled = {};
+const tzDisable = (name) => { if (!tzDisabled[name]) { tzDisabled[name] = true; console.log(`[翻译] 端点 ${name} 连续失败，本运行熔断停用`); } };
+async function translateOne(text) {
+  for (const ep of TZ_ENDPOINTS) {
+    if (tzDisabled[ep.name]) continue;
+    let out = '';
+    try {
+      const r = await fetch(ep.url(text), { signal: AbortSignal.timeout(ep.timeout), headers: UA });
+      if (!r.ok) { tzFail[ep.name] = (tzFail[ep.name] || 0) + 1; if (tzFail[ep.name] >= 6) tzDisable(ep.name); continue; }
+      const j = await r.json();
+      if (j && j[0]) out = j[0].map((x) => x[0]).join('').trim();
+      else if (j && j.responseData && j.responseData.translatedText) out = String(j.responseData.translatedText).trim();
+    } catch (e) { /* 下一个端点 */ }
+    if (out && /[\u4e00-\u9fff]/.test(out) && out.length > 1) { tzFail[ep.name] = 0; tzStats[ep.name]++; return out; }
+    tzFail[ep.name] = (tzFail[ep.name] || 0) + 1;
+    if (tzFail[ep.name] >= 6) tzDisable(ep.name);
+  }
+  tzStats.fail++;
+  return '';
+}
 function translateText(text) {
   return new Promise((resolve) => {
     if (!tzNeed(text)) return resolve('');
-    tzQueue.push({ text: text.slice(0, 1500), resolve, tries: 0 });
+    tzQueue.push({ text: text.slice(0, 1500), resolve });
     pumpTz();
   });
 }
 function pumpTz() {
   while (tzRunning < TZ_MAX_CONC && tzQueue.length) {
-    const { text, resolve, tries } = tzQueue.shift();
+    const { text, resolve } = tzQueue.shift();
     tzRunning++;
-    fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`, {
-      signal: AbortSignal.timeout(12000), headers: UA
-    })
-      .then((r) => r.json())
-      .then((j) => {
-        const out = (j && j[0] ? j[0].map((x) => x[0]).join('') : '').trim();
-        if (!out && tries < 1) { tzQueue.push({ text, resolve, tries: tries + 1 }); pumpTz(); return; }
-        resolve(out);
-      })
-      .catch(() => { if (tries < 1) { tzQueue.push({ text, resolve, tries: tries + 1 }); pumpTz(); return; } resolve(''); })
-      .finally(() => { tzRunning--; pumpTz(); });
+    translateOne(text).then(resolve).finally(() => { tzRunning--; pumpTz(); });
   }
 }
 async function translateItems(items) {
@@ -159,6 +177,7 @@ async function translateItems(items) {
     if (tzNeed(it.title) && !it.tz) jobs.push(translateText(it.title).then((t) => { it.tz = t; }));
   }
   await Promise.all(jobs);
+  console.log(`[翻译] 成功 gtx=${tzStats.gtx} gtx-web=${tzStats['gtx-web']} mymemory=${tzStats.mymemory} 失败=${tzStats.fail}`);
 }
 
 async function fetchLocation(q, lang) {
