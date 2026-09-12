@@ -724,7 +724,7 @@
     {
       "id": "venturebeat",
       "name": "VentureBeat",
-      "url": "https://venturebeat.com/feed/",
+      "url": "https://news.google.com/rss/search?q=site:venturebeat.com&hl=en-US&gl=US&ceid=US:en",
       "lang": "en",
       "region": "国外",
       "group": "科技/AI"
@@ -740,7 +740,7 @@
     {
       "id": "zdnet",
       "name": "ZDNet",
-      "url": "https://www.zdnet.com/news/rss.xml",
+      "url": "https://www.zdnet.com/feed/",
       "lang": "en",
       "region": "国外",
       "group": "科技/AI"
