@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="app.css?v=14">
+<link rel="stylesheet" href="app.css?v=15">
 <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
 <link rel="preconnect" href="https://translate.googleapis.com">
 </head>
@@ -26,7 +26,7 @@
         <input id="topSearch" type="search" autocomplete="off" placeholder="搜索全网新闻…">
         <div id="newsResults" class="hidden"></div>
       </div>
-      <button id="refreshBtn" class="chip" title="重载当前新闻并通知云端抓取最新">刷新</button>
+      <button id="refreshBtn" class="chip" title="重新加载最新数据（新闻每天 7:00 / 12:00 / 18:00 自动更新）">刷新</button>
       <button id="langBtn" class="chip" title="切换新闻语言">EN</button>
     </div>
     <div class="seg" id="viewToggle">
@@ -78,6 +78,6 @@
 </div>
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

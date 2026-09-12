@@ -1349,24 +1349,18 @@ function bindUI() {
   $('sheetRefresh').addEventListener('click', () => { if (state.selected) loadNews(state.selected); });
   $('sheetClose').addEventListener('click', () => { clearCountrySelected(); closeSheet(); });
 
-  // 全局「刷新」：重载当前数据 + 通知云端重新抓取最新新闻
+  // 全局「刷新」：清缓存、重载当前视图的数据
+  // 说明：云端抓取由 GitHub Actions 每天自动跑 3 次（北京时间 07:00 / 12:00 / 18:00）。
+  // 浏览器端无法直接触发（需要服务端密匙，Netlify 免费套餐不支持站点环境变量），故此处只做本地重载。
   $('refreshBtn').addEventListener('click', async () => {
     const btn = $('refreshBtn');
     btn.classList.add('busy');
-    // 1) 清缓存、重载当前视图
     staticIndexPromise = null;
     entryCache = null;
     newsTitlesPromise = null;
-    if (state.selected) loadNews(state.selected);
-    // 2) 通知云端（Netlify Function 触发 GitHub Actions）
-    try {
-      const r = await fetch('/.netlify/functions/refresh', { method: 'POST', signal: AbortSignal.timeout(20000) });
-      const j = await r.json().catch(() => null);
-      toast((j && j.ok) || r.ok ? '已通知云端抓取最新新闻，约 40 分钟后更新' : '云端通知失败，请稍后再试');
-    } catch (e) {
-      toast('当前页面暂不支持云端刷新，请使用 netlify.app 网址');
-    }
+    if (state.selected) await loadNews(state.selected);
     btn.classList.remove('busy');
+    toast('已重新加载最新数据 · 新闻每天 7:00 / 12:00 / 18:00 自动更新');
   });
 }
 

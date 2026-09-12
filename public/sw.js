@@ -1,7 +1,7 @@
 /* 环球新闻地球仪 Service Worker
  * 策略：大体积稳定资源（vendor/maplibre-gl、fonts）缓存优先 → 二次打开秒开；
  *      代码与数据（index/app.js/app.css/data/*）网络优先 → 改动即时生效 */
-const VERSION = 'gn-v4';
+const VERSION = 'gn-v5';
 const STATIC = [
   './',
   './index.html',
