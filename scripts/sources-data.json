@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T14:47:13.386Z",
+  "generatedAt": "2026-09-12T15:42:32.485Z",
   "sources": [
     {
       "id": "people",
@@ -2560,6 +2560,22 @@
       "group": "论坛/社区",
       "lang": "zh",
       "url": "https://news.google.com/rss/search?q=site:bbs.nga.cn&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    {
+      "id": "bogleheads",
+      "name": "Bogleheads Forum",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://www.bogleheads.org/forum/feed.php?mode=topics"
+    },
+    {
+      "id": "elitetrader",
+      "name": "Elite Trader",
+      "region": "国外",
+      "group": "论坛/社区",
+      "lang": "en",
+      "url": "https://www.elitetrader.com/et/forums/-/index.rss"
     }
   ]
 }

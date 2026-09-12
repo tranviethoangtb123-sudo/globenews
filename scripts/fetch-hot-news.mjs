@@ -89,23 +89,58 @@ async function fetchWindow(q, lang, when, attempt = 0, deadline = 0) {
   throw lastErr || new Error('全部域名不可用');
 }
 
-/* 轻量 RSS 解析（Google News 格式固定，无需第三方库） */
+/* 轻量 RSS/Atom 解析（Google News 格式固定，无需第三方库）
+ * 支持两种格式：
+ *   1) RSS 2.0  <item>...</item>            （含带属性的 <item rdf:about="...">）
+ *   2) Atom     <entry>...</entry>          （<link href="..."/>，Bogleheads / V2EX / Reddit 等在用）
+ * 历史 bug：旧版正则写死 /<item>([\s\S]*?)<\/item>/，导致带属性的 <item ...> 与全部 Atom feed 解析为 0 条。 */
 function parseRssItems(xml) {
   const items = [];
-  const re = /<item>([\s\S]*?)<\/item>/g;
-  let m;
-  while ((m = re.exec(xml))) {
-    const block = m[1];
-    const title = (block.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
-    const link = (block.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '';
-    const pub = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1] || '';
-    const desc = (block.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || '';
-    if (!title || !link) continue;
+  const push = (title, link, pub, desc) => {
+    if (!title || !link) return;
     const { title: t2, source } = splitSource(decodeXml(title));
     let snippet = extractSnippet(decodeXml(desc));
     if (source && snippet.endsWith('  ' + source)) snippet = snippet.slice(0, snippet.length - source.length - 2).trim();
     items.push({ title: t2, link: decodeXml(link), source, published: pub, snippet, cat: classifyCategories(t2 + ' ' + snippet).slice(0, 3) });
+  };
+
+  // ---- RSS 2.0 ----
+  const rssRe = /<item[\s>][\s\S]*?<\/item>/gi;
+  let m;
+  while ((m = rssRe.exec(xml))) {
+    const block = m[0];
+    const title = (block.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+    const link = (block.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || '';
+    const pub = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || [])[1] || '';
+    const desc = (block.match(/<description>([\s\S]*?)<\/description>/i) || [])[1] || '';
+    push(title, link, pub, desc);
   }
+
+  // ---- Atom ----
+  const atomRe = /<entry[\s>][\s\S]*?<\/entry>/gi;
+  while ((m = atomRe.exec(xml))) {
+    const block = m[0];
+    const title = (block.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+    // Atom 的链接在属性里；优先 rel="alternate"
+    let link = '';
+    for (const lm of block.matchAll(/<link\b[^>]*>/gi)) {
+      const tag = lm[0];
+      const href = (tag.match(/href=["']([^"']+)["']/i) || [])[1] || '';
+      const rel = (tag.match(/rel=["']([^"']+)["']/i) || [])[1] || 'alternate';
+      if (href && rel === 'alternate') { link = href; break; }
+      if (href && !link) link = href;
+    }
+    if (!link) {
+      const idm = (block.match(/<id[^>]*>([\s\S]*?)<\/id>/i) || [])[1] || '';
+      if (/^https?:/i.test(idm.trim())) link = idm.trim();
+    }
+    const pub = (block.match(/<published>([\s\S]*?)<\/published>/i) || [])[1]
+      || (block.match(/<updated>([\s\S]*?)<\/updated>/i) || [])[1] || '';
+    const desc = (block.match(/<content[^>]*>([\s\S]*?)<\/content>/i) || [])[1]
+      || (block.match(/<summary[^>]*>([\s\S]*?)<\/summary>/i) || [])[1] || '';
+    push(title, link, pub, desc);
+  }
+
   const uniq = [...new Map(items.map((i) => [i.link, i])).values()];
   uniq.sort((a, b) => new Date(b.published || 0) - new Date(a.published || 0));
   return uniq;
@@ -297,7 +332,8 @@ if (!SKIP_SOURCES) {
       const src = so[i];
       let srcItems = [];
       try {
-        const r = await fetch(src.url, { signal: AbortSignal.timeout(8000), headers: UA });
+        // 20s：8s 对部分海外 feed 太紧（Nature Medicine / EIA 等会超时导致"空源"）
+        const r = await fetch(src.url, { signal: AbortSignal.timeout(20000), headers: UA });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const items = parseRssItems(await r.text());
         if (items.length) {
