@@ -328,21 +328,43 @@ if (!SKIP_SOURCES) {
   try {
     const sd = JSON.parse(await readFile(join(__dirname, 'sources-data.json'), 'utf8'));
     const so = (sd && sd.sources) || [];
+    // 带退避重试的单源抓取：429/5xx/超时 都重试，缓解云端限流造成的"空源"
+    const fetchSource = async (url, label) => {
+      let lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          // 20s：8s 对部分海外 feed 太紧（Nature Medicine / EIA 等会超时导致"空源"）
+          const r = await fetch(url, { signal: AbortSignal.timeout(20000), headers: UA });
+          if (r.status === 429 || r.status >= 500) throw Object.assign(new Error(`HTTP ${r.status}`), { retry: true });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.text();
+        } catch (e) {
+          lastErr = e;
+          const retriable = e.retry || /timeout|aborted|fetch failed|ECONN|socket/i.test(e.message || '');
+          if (!retriable || attempt === 2) break;
+          // 429 给更长的退避（Reddit / Google News 限流多为短时）
+          const wait = (e.retry ? 4000 : 1500) * (attempt + 1) + Math.random() * 800;
+          await sleep(wait);
+        }
+      }
+      throw lastErr || new Error('抓取失败');
+    };
+
     for (let i = 0; i < so.length; i++) {
       const src = so[i];
       let srcItems = [];
       try {
-        // 20s：8s 对部分海外 feed 太紧（Nature Medicine / EIA 等会超时导致"空源"）
-        const r = await fetch(src.url, { signal: AbortSignal.timeout(20000), headers: UA });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const items = parseRssItems(await r.text());
+        const xml = await fetchSource(src.url, src.name);
+        const items = parseRssItems(xml);
         if (items.length) {
           const top = items.slice(0, 8);
           for (const it of top) addPool(it, '📰 ' + src.name, null);
           // 用池内（翻译后）的条目作为来源展示数据
           srcItems = top.map((it) => pool.get(it.link)).filter(Boolean);
+        } else {
+          console.log(`[fetch] 来源无条目 ${src.name} (${src.url.slice(0, 70)})`);
         }
-      } catch (e) { if (i < 3) console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`); }
+      } catch (e) { console.log(`[fetch] 来源失败 ${src.name}: ${e.message}`); }
       // 无论是否打通都保留来源（空内容也显示名称）
       sourceOut.push({ name: src.name, region: src.region, group: src.group, lang: src.lang, items: srcItems });
       if ((i + 1) % 30 === 0) console.log(`[fetch] 来源 ${i + 1}/${so.length}`);
