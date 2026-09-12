@@ -46,9 +46,39 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Deploy to Netlify
+        id: netlify
+        continue-on-error: true
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
-          npm install -g netlify-cli >/dev/null 2>&1
+          set -uo pipefail
+          echo "NETLIFY_SITE_ID present: $([ -n "${NETLIFY_SITE_ID:-}" ] && echo yes || echo NO)"
+          echo "NETLIFY_AUTH_TOKEN present: $([ -n "${NETLIFY_AUTH_TOKEN:-}" ] && echo yes || echo NO)"
+          # 预检令牌是否仍然有效：直接打 Netlify API，避免又白等一整轮抓取才发现令牌失效。
+          if ! curl -sf -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" https://api.netlify.com/api/v1/accounts >/dev/null; then
+            echo "::error title=Netlify 令牌失效::NETLIFY_AUTH_TOKEN 无效、已失效或被吊销，本轮跳过 Netlify 部署。请在 Netlify 重建 PAT 并更新仓库 secret（见 SESSION-HANDOVER.md §2）。"
+            exit 1
+          fi
+          echo "Netlify 令牌校验通过"
+          npm install -g netlify-cli >/dev/null 2>&1 || { echo "::warning title=Netlify CLI 安装失败::npm install -g netlify-cli 返回非零"; exit 1; }
           netlify deploy --dir public --functions functions --prod --site "$NETLIFY_SITE_ID" --auth "$NETLIFY_AUTH_TOKEN" --message "cloud fetch"
+
+      - name: Report Netlify outcome
+        if: always()
+        env:
+          NETLIFY_OUTCOME: ${{ steps.netlify.outcome }}
+        run: |
+          # Netlify 失败不应让整轮 run 报红——Pages 已成功发布最新站点。
+          echo "Netlify step outcome: $NETLIFY_OUTCOME"
+          if [ "$NETLIFY_OUTCOME" != "success" ]; then
+            echo "::warning title=Netlify 未部署::本轮 Netlify 部署失败（${NETLIFY_OUTCOME}）。最新站点已通过 GitHub Pages 发布；Netlify 站点仍旧版。"
+            {
+              echo "### ⚠️ Netlify 未部署"
+              echo ""
+              echo "本轮 Netlify 步骤结果为 `$NETLIFY_OUTCOME`（GitHub Pages 已正常发布最新站点）。"
+              echo "常见原因：`NETLIFY_AUTH_TOKEN` 失效/被吊销，或 `NETLIFY_SITE_ID` 缺失。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "✅ Netlify 部署成功"
+          fi
