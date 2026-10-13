@@ -72,26 +72,32 @@ jobs:
         id: netlify_outcome
 
       - name: Report Netlify outcome
-        # 如实报告：Netlify 失败 -> 整轮 run 失败（GitHub Pages 仍然已成功发布）
+        # 如实报告：Netlify 失败 -> 本步骤 exit 1 -> 整轮 run 报红（GitHub Pages 仍已成功发布）
+        # 注意：仅打 ::error 注解【不会】让步骤失败，必须显式 exit 1。
         if: always() && steps.netlify.outcome != 'success'
         run: |
           OUTCOME="${{ steps.netlify.outcome }}"
-          echo "::error title=Netlify 未部署::本轮 Netlify 部署失败（${OUTCOME}）。GitHub Pages 已正常发布最新站点，但对外主网址仍然停留在旧版本。"
-          {
-            echo "### ❌ Netlify 未部署（整轮标记为失败）"
-            echo ""
-            echo "Netlify 步骤结果：`${OUTCOME}`"
-            echo ""
-            echo "GitHub Pages 已发布最新站点；**Netlify 站点（对外主网址）仍是旧版**。"
-            echo ""
-            echo "排查顺序（详见仓库根目录 SESSION-HANDOVER.md §5 与 RECOVERY-CARD.md）："
-            echo "1. `NETLIFY_AUTH_TOKEN` 是否失效/被吊销 → 重建 PAT 并用 `tools/update-netlify-token.mjs` 写回"
-            echo "2. **Netlify 账户额度是否耗尽**（免费版 300 credits/月）→ 日志出现 `Account credit usage exceeded` 即为此因，需等下期重置或充值"
-            echo "3. 本地复现：`node tools/repro-netlify-deploy.mjs` 可拿到精确的拒绝原因"
-            echo ""
-            echo "> 临时替代：GitHub Pages 站点始终是最新的 → https://tranviethoangtb123-sudo.github.io/globenews/"
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Netlify 未部署::本轮 Netlify 部署失败（${OUTCOME}）。GitHub Pages 已正常发布最新站点，但对外主网址（Netlify）仍是旧版。"
+          # 单引号 heredoc：避免反引号被 shell 当命令执行
+          cat >> "$GITHUB_STEP_SUMMARY" <<'GN_SUMMARY'
+          ### ❌ Netlify 未部署（整轮 run 已标记为失败）
+
+          GitHub Pages 已发布最新站点；**Netlify 站点（对外主网址）仍是旧版**。
+
+          排查顺序（详见 SESSION-HANDOVER.md §5 与 RECOVERY-CARD.md）：
+          1. `NETLIFY_AUTH_TOKEN` 是否失效/被吊销 → 重建 PAT，用 `tools/update-netlify-token.mjs` 写回
+          2. **Netlify 账户额度是否耗尽**（免费版 300 credits/月）→ 若报 `Account credit usage exceeded`，需等下期重置或充值
+          3. 本地复现：`node tools/repro-netlify-deploy.mjs` 可拿到精确的拒绝原因
+
+          > 临时替代：GitHub Pages 站点始终最新 → https://tranviethoangtb123-sudo.github.io/globenews/
+          GN_SUMMARY
+          # 明确失败，防止"坏了却全绿"
+          exit 1
 
       - name: Netlify deploy confirmed
         if: always() && steps.netlify.outcome == 'success'
-        run: echo "✅ Netlify 部署成功，两个站点均为最新"
+        run: |
+          echo "✅ Netlify 部署成功，两个站点均为最新"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'GN_SUMMARY2'
+          ### ✅ 两个站点均已发布最新版
+          GN_SUMMARY2
